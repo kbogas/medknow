@@ -382,12 +382,101 @@ def semrep_wrapper(text):
     return results
 
 
+def clean_text(text):
+    """
+    Escape specific characters for command line call of SemRep. This
+    could be updated in the future to more sophisticated transformations.
+    Input:
+        - text: str,
+        piece of text to clean
+    Output:
+        - text: str,
+        the same text with cmd escaped parenthesis and removing '
+    """
 
+    text = text.replace('(', '\(').replace(')', '\)').replace("'",  ' ')
+    return text
+
+
+def extract_semrep(json_, key):
+    """
+    Task function to parse and extract concepts from json_ style dic, using
+    the SemRep binary.
+    Input:
+        - json_ : dic,
+        json-style dictionary generated from the Parse object related
+        to the specific type of input
+        - key : str,
+        string denoting the type of medical text to read from. Used to
+        find the correct paragraph in the settings.yaml file.
+    Output:
+        - json_ : dic,
+        the previous json-style dictionary enriched with medical concepts
+    """
+    # outerfield for the documents in json
+    docfield = settings['load'][key]['json_doc_field']
+    # textfield to read text from
+    textfield = settings['load'][key]['json_text_field']
+    N = len(json_[docfield])
+    for i, doc in enumerate(json_[docfield]):
+        text = clean_text(doc[textfield])
+        results = semrep_wrapper(text)
+        json_[docfield][i] = results
+        proc = int(i/float(N)*100)
+        if proc % 10 == 0:
+            time_log('We are at %d/%d documents -- %0.2f %%' % (i, N, proc))
+    return json_
+
+
+def parse_medical_rec():
+    """
+    Parse file containing medical records.
+    Output:
+        - json_ : dic,
+        json-style dictionary with field medical_records containing
+        a list of dicts, with field text, containing the medical record
+        json_ = {'medical_records': [{'text':...}, {'text':...}]}
+    """
+
+    # input file path from settings.yaml
+    inp_path = settings['load']['med_rec']['inp_path']
+    # csv seperator from settings.yaml
+    sep = settings['load']['med_rec']['sep']
+    # textfield to read text from
+    textfield = settings['load']['med_rec']['text_field']
+    with open(inp_path, 'r') as f:
+        diag = pd.DataFrame.from_csv(f, sep='\t')
+    # Get texts
+    texts = diag[textfield].values
+    # outerfield for the documents in json
+    docfield = settings['load']['med_rec']['json_doc_field']
+    # textfield to read text from
+    out_textfield = settings['load']['med_rec']['json_text_field']
+    json_ = {docfield: []}
+    for text in texts:
+        json_[docfield].append({out_textfield: text})
+    return json_
+
+
+def parse_json():
+    """
+    Parse file containing articles.
+    Output:
+        - json_ : dic,
+        json-style dictionary with field documents containing
+        a list of dicts, with field text, containing the attributes of
+        the article
+        json_ = {'documents': [{...}, {...}]}
+    """
+
+    # input file path from settings.yaml
+    inp_path = settings['load']['json']['inp_path']
+    with open(inp_path, 'r') as f:
+        json_ = json.load(f, encoding='utf-8')
+    return json_
 
 
 
 
 #results = extract_entities(text)
 #results = enrich_with_triples(results, subject='Text Title')
-
-

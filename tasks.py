@@ -6,129 +6,129 @@
 # a task to complete, such as reading from file, extracting concepts
 # and saving to disk again.
 
-import json
-import os
-import py2neo
-import csv
-import subprocess
-import urllib2
-import requests
-import unicodecsv as csv2
-import pandas as pd
-from nltk.tokenize import sent_tokenize
 from config import settings
 from utilities import time_log
-from data_loader import semrep_wrapper
-
-
-
-def extract_medical_rec(json_):
-    """
-    Task function to parse and extract concepts from medical records.
-    """
-
-    for med_rec in json_['medical_records']:
-        results = semrep_wrapper(clean_text(med_rec['text']))
-        # Update the medical records
-        json_['medical_records'][-1] = results
-    return json_
-
-
-def parse_medical_rec():
-    """
-    Parse file containing medical records.
-    Output:
-        - json_ : dic,
-        json-style dictionary with field medical_records containing
-        a list of dicts, with field text, containing the medical record
-        json_ = {'medical_records': [{'text':...}, {'text':...}]}
-    """
-
-    # input file path from settings.yaml
-    inp_path = settings['load']['med_rec']['inp_path']
-    # csv seperator from settings.yaml
-    sep = settings['load']['med_rec']['sep']
-    # textfield to read text from
-    textfield = settings['load']['med_rec']['text_field']
-    with open(inp_path, 'r') as f:
-        diag = pd.DataFrame.from_csv(f, sep=sep)
-    # Get texts
-    texts = diag[textfield].values
-    json_ = {'medical_records': []}
-    for text in texts:
-        json_['medical_records'].append({'text': text})
-    return json_
-
-
-def clean_text(text):
-    """
-    Escape specific characters for command line call of SemRep. This
-    could be updated in the future to more sophisticated transformations.
-    Input:
-        - text: str,
-        piece of text to clean
-    Output:
-        - text: str,
-        the same text with cmd escaped parenthesis and removing '
-    """
-
-    text = text.replace('(', '\(').replace(')', '\)').replace("'",  ' ')
-    return text
-
-def extract_from_json(infile, semrep_path):
-    with open(infile, 'r') as f:
-        json_ = json.load(f, encoding='utf-8')
-    for i, doc in enumerate(json_['documents']):
-        print i
-        text = clean_text(doc['abstractText'])
-        results = semrep_wrapper(text, semrep_path)
-        doc['sents'] = results['sents']
-        json_['documents'][i] = doc
-    return json_
-        #total_res['medical_records'].append(results)
-    #return total_res
-
+from data_loader import parse_medical_rec, parse_json, extract_semrep
+from data_saver import save_csv, save_neo4j, save_json
 
 
 class Parser(object):
     """
     Parser class for reading input. According to which pipeline
     task it is called upon, it parses the appropriate file.
+    Filepaths and details according to settings.yaml.
     """
 
-    def __init__(self, key):
+    def __init__(self, key, name=None):
+        """
+        Initialization of the class. Currently keys are:
+        ['med_rec', 'json']. The name is only for pretty-printing
+        purposes.
+        """
+
         self.key = key
         if self.key == 'med_rec':
             self.func = parse_medical_rec
         elif self.key == 'json':
             self.func = parse_json
+        if name:
+            self.name = name
+        else:
+            self.name = self.key
 
     def read(self):
+        """
+        Run the corresponding parsing function and return the .json_
+        dictionary result.
+        """
+
         json_ = self.func()
+        time_log('Completed Parsing. Read: %d documents!' % len(json_[settings['load'][self.key]['json_doc_field']]))
         return json_
 
 
 class Extractor(object):
     """
-    Class for each task to be completed. Mainly implements the
-    run fuction. Expects to work with json files.
+    Class for extracting concepts/entities and relations from medical text.
+    Expects to work with json files generated from the corresponding Parser
+    objects. Currently ['semrep'] implemented.
+    Filepaths and details according to settings.yaml.
+    """
+
+    def __init__(self, key, parser_key, name=None):
+        """
+        Initialization of the class.
+        Input:
+            - key: str,
+            string denoting what extraction task is to take place
+            - parser_key: str,
+            string denoting what type of input to expect
+            - name: str,
+            optional string for the tast to be printed
+        """
+
+        self.key = key
+        self.parser_key = parser_key
+        if self.key == 'semrep':
+            self.func = extract_semrep
+        elif self.key == 'metamap':
+            raise NotImplementedError
+            # self.func = extract_metamap
+        elif self.key == 'reverb':
+            raise NotImplementedError
+            # self.func = extract_reverb
+        if name:
+            self.name = name
+        else:
+            self.name = self.key
+
+    def run(self, json):
+        """
+        Run the corresponding extracting function and return the .json_
+        dictionary result.
+        """
+
+        if type(json) == dict:
+            json_ = self.func(json, self.parser_key)
+            time_log('Completed extracting using %s!' % self.name)
+        else:
+            print 'Unsupported type of json to work on!'
+            print 'Task : %s  --- Type of json: %s' % (self.name, type(json))
+            print json
+            json_ = {}
+        return json_
+
+
+class Dumper(object):
+    """
+    Class for saving the extracted results. Expects to work with json files
+    generated from the previous extraction phases. Currently implemented
+    dumping methods for keys:
+        -json : for the enriched medical documents
+        -csv : for nodes, relations before importing into neo4j
+        -neo4j: for nodes, relations updating neo4j db directly
+    Filepaths and details according to settings.yaml.
     """
 
     def __init__(self, key, name=None):
         self.key = key
-        if self.key == 'med_rec':
-            self.func = extract_medical_rec
-        elif self.key == 'json':
-            self.func = extract_json
-        if not(self.name):
-            self.name = key
+        if self.key == 'json':
+            self.func = save_json
+        elif self.key == 'csv':
+            raise NotImplementedError
+            # self.func = extract_metamap
+        elif self.key == 'neo4j':
+            raise NotImplementedError
+            # self.func = extract_reverb
+        if name:
+            self.name = name
+        else:
+            self.name = self.key
 
-    def run(json):
-        if type(json) == dict:
-            json_ = self.run(json)
-        elif type(json) == str or not(json):
-            json = Parser(self.key).read()
-            json_ = self.run(json)
+    def save(self, json_):
+        if type(json_) == dict:
+            json_ = self.func(json_)
+            time_log('Completed saving to file. Results saved in:\n %s' % settings['out'][self.key]['out_path'])
         else:
             print 'Unsupported type of json to work on!'
             print 'Task : %s  --- Type of json: %s' % (self.name, type(json))
@@ -138,6 +138,9 @@ class Extractor(object):
 
 
 class taskCoordinator(object):
+    """
+    Orchestrator class for the different saving values.
+    """
 
     def __init__(self):
         self.pipeline = {}
@@ -148,13 +151,33 @@ class taskCoordinator(object):
                 if value:
                     self.pipeline[phase][key] = value
 
+    def run(self):
+        for phase in self.phases:
+            dic = self.pipeline[phase]
+            if phase == 'in':
+                parser = Parser(self.pipeline[phase]['inp'])
+                json_ = parser.read()
+            if phase == 'trans':
+                for key, value in dic.iteritems():
+                    if value:
+                        extractor = Extractor(key, parser.key)
+                        json_ = extractor.run(json_)
+                        print '### EXTRACTOR ###'*50
+                        print json_
+            if phase == 'out':
+                for key, value in dic.iteritems():
+                    if value:
+                        print '$$$$ DUMPER $$$'*50
+                        print json_
+                        dumper = Dumper(key)
+                        dumper.save(json_)
 
     def print_pipeline(self):
         print('#'*30 + ' Pipeline Schedule' + '#'*30)
         for phase in self.phases:
             dic = self.pipeline[phase]
             if phase == 'in':
-                print('Will read from: %s' % settings['load']['vars'][dic['inp']]['inp_path'])
+                print('Will read from: %s' % settings['load'][dic['inp']]['inp_path'])
             if phase == 'trans':
                 print('Will use the following transformation utilities:')
                 for key, value in dic.iteritems():
@@ -163,4 +186,4 @@ class taskCoordinator(object):
                 print('Will save the outcome as follows:')
                 for key, value in dic.iteritems():
                     print('%s  : %s' % (key, settings['out'][key]['out_path']))
-        print('#'*30 + ' Pipeline Schedule' + '#'*30)
+        print('#'*30 + ' Pipeline Schedule ' + '#'*30)
