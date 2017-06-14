@@ -414,14 +414,14 @@ def extract_semrep(json_, key):
         the previous json-style dictionary enriched with medical concepts
     """
     # outerfield for the documents in json
-    docfield = settings['load'][key]['json_doc_field']
+    docfield = settings['out']['json']['json_doc_field']
     # textfield to read text from
-    textfield = settings['load'][key]['json_text_field']
+    textfield = settings['out']['json']['json_text_field']
     N = len(json_[docfield])
     for i, doc in enumerate(json_[docfield]):
         text = clean_text(doc[textfield])
         results = semrep_wrapper(text)
-        json_[docfield][i] = results
+        json_[docfield][i].update(results)
         proc = int(i/float(N)*100)
         if proc % 10 == 0:
             time_log('We are at %d/%d documents -- %0.2f %%' % (i, N, proc))
@@ -443,18 +443,32 @@ def parse_medical_rec():
     # csv seperator from settings.yaml
     sep = settings['load']['med_rec']['sep']
     # textfield to read text from
-    textfield = settings['load']['med_rec']['text_field']
+    textfield = settings['load']['med_rec']['textfield']
+    # idfield where id of document is stored
+    idfield = settings['load']['med_rec']['idfield']
     with open(inp_path, 'r') as f:
         diag = pd.DataFrame.from_csv(f, sep='\t')
     # Get texts
     texts = diag[textfield].values
     # outerfield for the documents in json
-    docfield = settings['load']['med_rec']['json_doc_field']
+    docfield = settings['out']['json']['json_doc_field']
     # textfield to read text from
-    out_textfield = settings['load']['med_rec']['json_text_field']
-    json_ = {docfield: []}
-    for text in texts:
-        json_[docfield].append({out_textfield: text})
+    out_textfield = settings['out']['json']['json_text_field']
+    # idfield where id of document is stored
+    out_idfield = settings['out']['json']['json_id_field']
+    # labelfield where title of the document is stored
+    out_labelfield = settings['out']['json']['json_label_field']
+    diag[out_labelfield] = ['Medical Record' + str(i) for i in diag.index.values.tolist()]
+    diag['journal'] = ['None' for i in diag.index.values.tolist()]
+    # Replace textfiled with out_textfield
+    diag[out_textfield] = diag[textfield]
+    del diag[textfield]
+    # Replace id with default out_idfield
+    diag[out_idfield] = diag[idfield]
+    del diag[idfield]
+    json_ = {docfield: diag.to_dict(orient='records')}
+    #for text in texts:
+    #    json_[docfield].append({out_textfield: text})
     return json_
 
 
@@ -473,6 +487,34 @@ def parse_json():
     inp_path = settings['load']['json']['inp_path']
     with open(inp_path, 'r') as f:
         json_ = json.load(f, encoding='utf-8')
+
+    # docfield containing list of elements containing text
+    outfield = settings['load']['json']['docfield']
+    # textfield to read text from
+    textfield = settings['load']['json']['textfield']
+    # idfield where id of document is stored
+    idfield = settings['load']['json']['idfield']
+    # labelfield where title of the document is stored
+    labelfield = settings['load']['json']['labelfield']
+    
+    ## Values to replace them with ##
+
+    # docfield containing list of elements
+    out_outfield = settings['out']['json']['json_doc_field']
+    # textfield to read text from
+    out_textfield = settings['out']['json']['json_text_field']
+    # idfield where id of document is stored
+    out_idfield = settings['out']['json']['json_id_field']
+    # labelfield where title of the document is stored
+    out_labelfield = settings['out']['json']['json_label_field']
+    for article in json_[outfield]:
+        article[out_textfield] = article.pop(textfield)
+        article[out_idfield] = article.pop(idfield)
+        article[out_labelfield] = article.pop(labelfield)
+        #del article[textfield]
+        #del article[idfield]
+    json_[out_outfield] = json_.pop(outfield)
+    #del json[outfield]
     return json_
 
 

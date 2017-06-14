@@ -9,7 +9,7 @@
 from config import settings
 from utilities import time_log
 from data_loader import parse_medical_rec, parse_json, extract_semrep
-from data_saver import save_csv, save_neo4j, save_json
+from data_saver import save_csv, save_neo4j, save_json, create_neo4j_results, create_neo4j_csv
 
 
 class Parser(object):
@@ -43,7 +43,7 @@ class Parser(object):
         """
 
         json_ = self.func()
-        time_log('Completed Parsing. Read: %d documents!' % len(json_[settings['load'][self.key]['json_doc_field']]))
+        time_log('Completed Parsing. Read: %d documents!' % len(json_[settings['out']['json']['json_doc_field']]))
         return json_
 
 
@@ -108,18 +108,30 @@ class Dumper(object):
         -csv : for nodes, relations before importing into neo4j
         -neo4j: for nodes, relations updating neo4j db directly
     Filepaths and details according to settings.yaml.
+    Params:
+        - key: str,
+        one of the json, csv, neo4j
+        - inp_key: str,
+        the Parser key for this pipeline
+        - name: str,
+        Name of the Dumper. For printing purposes only
     """
 
-    def __init__(self, key, name=None):
+    def __init__(self, key, inp_key='json', name=None):
         self.key = key
         if self.key == 'json':
+            self.transform = None
             self.func = save_json
-        elif self.key == 'csv':
-            raise NotImplementedError
-            # self.func = extract_metamap
+        elif self.key == 'csv' or self.key == 'neo4j':
+            self.transform = create_neo4j_results
+            self.func = create_neo4j_csv
         elif self.key == 'neo4j':
-            raise NotImplementedError
-            # self.func = extract_reverb
+            self.transform = create_neo4j_results
+            self.func = updat
+        if inp_key == 'med_rec' or inp_key == 'json':
+            self.type_ = 'harvester'
+        elif inp_key == 'edges':
+            self.type_ = 'edges'
         if name:
             self.name = name
         else:
@@ -127,8 +139,12 @@ class Dumper(object):
 
     def save(self, json_):
         if type(json_) == dict:
-            json_ = self.func(json_)
-            time_log('Completed saving to file. Results saved in:\n %s' % settings['out'][self.key]['out_path'])
+            if self.transform:
+                results = self.transform(json_, self.type_)
+            else:
+                results = json_ 
+            json_ = self.func(results)
+            time_log('Completed saving data. Results saved in:\n %s' % settings['out'][self.key]['out_path'])
         else:
             print 'Unsupported type of json to work on!'
             print 'Task : %s  --- Type of json: %s' % (self.name, type(json))
@@ -168,8 +184,8 @@ class taskCoordinator(object):
                 for key, value in dic.iteritems():
                     if value:
                         print '$$$$ DUMPER $$$'*50
-                        print json_
-                        dumper = Dumper(key)
+                        key, value
+                        dumper = Dumper(key, parser.key)
                         dumper.save(json_)
 
     def print_pipeline(self):
