@@ -45,8 +45,8 @@ def mmap_extract(text):
     concepts, errors = mm.extract_concepts(sents, range(len(sents)), 
                                          word_sense_disambiguation=True)
     if errors:
-        print 'Errors with extracting concepts!'
-        print errors
+        time_log('Errors with extracting concepts!')
+        time_log(errors)
     return concepts
 
 
@@ -138,9 +138,9 @@ def cui_to_uri(api_key, cui):
     annotations = get_json_with_api(api_key, REST_URL + "/search?include_properties=true&q=" + urllib2.quote(cui))
     try:
         return annotations['collection'][0]['@id']
-    except Exception,e:
-        print Exception
-        print e
+    except Exception, e:
+        time_log(Exception)
+        time_log(e)
         return None
 
 def get_json_with_api(api_key, url):

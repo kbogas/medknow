@@ -9,7 +9,8 @@
 from config import settings
 from utilities import time_log
 from data_loader import parse_medical_rec, parse_json, extract_semrep
-from data_saver import save_csv, save_neo4j, save_json, create_neo4j_results, create_neo4j_csv
+from data_saver import save_csv, save_neo4j, save_json, create_neo4j_results, \
+                        create_neo4j_csv, update_neo4j
 
 
 class Parser(object):
@@ -122,12 +123,12 @@ class Dumper(object):
         if self.key == 'json':
             self.transform = None
             self.func = save_json
-        elif self.key == 'csv' or self.key == 'neo4j':
+        elif self.key == 'csv':
             self.transform = create_neo4j_results
             self.func = create_neo4j_csv
         elif self.key == 'neo4j':
             self.transform = create_neo4j_results
-            self.func = updat
+            self.func = update_neo4j
         if inp_key == 'med_rec' or inp_key == 'json':
             self.type_ = 'harvester'
         elif inp_key == 'edges':
@@ -178,13 +179,9 @@ class taskCoordinator(object):
                     if value:
                         extractor = Extractor(key, parser.key)
                         json_ = extractor.run(json_)
-                        print '### EXTRACTOR ###'*50
-                        print json_
             if phase == 'out':
                 for key, value in dic.iteritems():
                     if value:
-                        print '$$$$ DUMPER $$$'*50
-                        key, value
                         dumper = Dumper(key, parser.key)
                         dumper.save(json_)
 

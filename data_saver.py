@@ -16,11 +16,15 @@ import requests
 import unicodecsv as csv2
 import pandas as pd
 import py2neo
+import logging
 from config import settings
 from utilities import time_log
 
 
-
+suppress_log_to_file = py2neo.watch('neo4j',
+                                    level='ERROR', out='./out/neo4j.log')
+suppress_log_to_file2 = py2neo.watch('httpstream',
+                                    level='ERROR', out='./out/neo4j.log')
 
 def save_json(json_):
     """
@@ -152,7 +156,7 @@ def create_neo4j_results(json_, key='harvester'):
     elif key == 'edges':
         results = create_neo4j_edges(json_)
     else:
-        print('Type %s of data not yet supported!' % key)
+        time_log('Type %s of data not yet supported!' % key)
         raise NotImplementedError
     return results
 
@@ -340,7 +344,7 @@ def create_neo4j_csv(results):
                 dict_writer = csv2.DictWriter(output_file, fieldnames=dic_fiels[k], encoding='utf-8')
                 dict_writer.writeheader()
                 dict_writer.writerows(toCSV)
-        time_log('Created all documents needed')
+    time_log('Created all documents needed')
 
 
 
@@ -355,7 +359,7 @@ def fix_on_create_nodes(node):
         function
     Output:
         - s: string,
-        string of cypher query handling the merging new node task
+        part of cypher query, responsible handling the creation of anew node
     """
     s = 'ON CREATE SET'
     for key, value in node.iteritems():
@@ -365,18 +369,19 @@ def fix_on_create_nodes(node):
             field = key.split(':')[0]
             string_value = '['
             for i in value.split(';'):
-                string_value  += '"'+ i + '"' + ','
-            string_value  = string_value [:-1]+ ']'
-            s += ' a.%s = %s,' %(field, string_value )
+                string_value += '"' + i + '"' + ','
+            string_value = string_value[:-1] + ']'
+            s += ' a.%s = %s,' % (field, string_value)
         elif 'float[]' in key:
             field = key.split(':')[0]
             string_value = str([int(i) for i in value.split(';')])
-            s += ' a.%s = %s,' %(field, string_value)
+            s += ' a.%s = %s,' % (field, string_value)
         else:
             field = key.split(':')[0]
-            s += ' a.%s = "%s",' %(field, value)
+            s += ' a.%s = "%s",' % (field, value.replace('"', "'"))
     s = s[:-1]
     return s
+
 
 def create_merge_query(node, type_, id_):
     """
@@ -386,12 +391,149 @@ def create_merge_query(node, type_, id_):
         dictionary of a node containing the attributes of the
         node
         - type_: str,
-        ty
+        type of the node to be merged
+        - id_ : str,
+        id attribute against which existing nodes will be matched
+    Output:
+        - quer: str,
+        the complete cypher query ready to be run
     """
     quer = """
     MERGE (a:%s {%s:"%s"})
-    %s""" % (type_, id_, node[id_+":ID"], fix_on_create(node))
+    %s""" % (type_, id_, node[id_+":ID"], fix_on_create_nodes(node))
     return quer
+
+
+def populate_nodes(graph, nodes, type_, id_):
+    """
+    Function that actually calls the cypher query and populates the graph
+    with nodes of type_, merging on already existing nodes on their id_.
+    Input:
+        -graph: py2neo.Graph,
+        object representing the graph in neo4j. Using py2neo.
+        - nodes: list,
+        list of dics containing the attributes of each node
+        - type_: str,
+        type of the node to be merged
+        - id_ : str,
+        id attribute against which existing nodes will be matched
+    Output: None, populates the db.
+    """
+    c = 0
+    total_rel = 0
+    time_log('~~~~~~  Will create nodes of type: %s  ~~~~~~' % type_)
+    for ent in nodes:
+        c += 1
+        quer = create_merge_query(ent, type_, id_)
+        f = graph.run(quer)
+        total_rel += f.stats()['nodes_created']
+        if c % 1000 == 0 and c > 999:
+            time_log("Process: %d -- %0.2f %%" % (c, 100*c/float(len(nodes))))
+    time_log('#%s : %d' % (type_, c))
+    time_log('Finally added %d new nodes!' % total_rel) 
+
+
+def populate_relation_edges(graph, relations_edges):
+    """
+    Function to create/merge the relation edges between existing entities.
+    Input:
+        - graph: py2neo.Graph,
+        object representing the graph in neo4j. Using py2neo.
+        - relations_edges: list,
+        list of dics containing the attributes of each relation
+    Output: None, populates the db.
+    """
+    c = 0
+    total_rel = 0
+    for edge in relations_edges:
+        c +=1  
+        quer = """
+        Match (a:Entity {cui:"%s"}), (b:Entity {cui:"%s"})
+        MATCH (a)-[r:%s]->(b)
+        WHERE "%s" in r.sent_id
+        Return r;
+        """ % (edge[':START_ID'], edge[':END_ID'], edge[':TYPE'], edge['sent_id:string[]'].split(';')[0])
+        f = graph.run(quer)
+        if len(f.data()) == 0:
+            subj_s = '['
+            for i in edge['subject_sem_type:string[]'].split(';'):
+                subj_s += '"' + i + '"' + ','
+            subj_s = subj_s[:-1] + ']'
+            obj_s = '['
+            for i in edge['object_sem_type:string[]'].split(';'):
+                obj_s += '"' + i + '"' + ','
+            obj_s = obj_s[:-1] + ']'
+            sent_s = '['
+            for i in edge['sent_id:string[]'].split(';'):
+                sent_s += '"' + i + '"' + ','
+            sent_s = sent_s[:-1] + ']'
+            neg_s = '['
+            for i in edge['negation:string[]'].split(';'):
+                neg_s += '"' + i + '"' + ','
+            neg_s = neg_s[:-1] + ']'
+            quer = """
+            Match (a:Entity {cui:"%s"}), (b:Entity {cui:"%s"})
+            MERGE (a)-[r:%s]->(b)
+            ON MATCH SET r.subject_score = r.subject_score + %s, r.subject_sem_type = r.subject_sem_type + %s,
+            r.object_score = r.object_score + %s, r.object_sem_type = r.object_sem_type + %s,
+            r.sent_id = r.sent_id + %s, r.negation = r.negation + %s
+            ON CREATE SET r.subject_score = %s, r.subject_sem_type =  %s,
+            r.object_score =  %s, r.object_sem_type =  %s,
+            r.sent_id =  %s, r.negation =  %s
+            """ % (edge[':START_ID'], edge[':END_ID'], edge[':TYPE'], 
+                   str([int(i) for i in edge['subject_score:float[]'].split(';')]), subj_s, 
+                   str([int(i) for i in edge['object_score:float[]'].split(';')]), obj_s,
+                 sent_s, neg_s, str([int(i) for i in edge['subject_score:float[]'].split(';')]), subj_s, 
+                   str([int(i) for i in edge['object_score:float[]'].split(';')]), obj_s,
+                 sent_s, neg_s)
+            f = graph.run(quer)
+            total_rel += f.stats()['relationships_created']
+        if c % 1000 == 0 and c > 999:
+            time_log('Process: %d -- %0.2f %%' % (c, 100*c/float(len(relations_edges))))
+    time_log('# Relations %d' % c)
+    time_log('Finally added %d new relations!' % total_rel)
+
+def populate_mentioned_edges(graph, entity_pmc_edges):
+    """
+    Function to create/merge the relation edges between existing entities.
+    Input:
+        - graph: py2neo.Graph,
+        object representing the graph in neo4j. Using py2neo.
+        - entity_pmc_edges: list,
+        list of dics containing the attributes of each relation
+    Output: None, populates the db.
+    """
+
+    c = 0
+    total_rel = 0
+    for edge in entity_pmc_edges:
+        c += 1
+        quer = """
+        Match (a:Entity {cui:"%s"}), (b:Article {pmcid:"%s"})
+        MATCH (a)-[r:MENTIONED_IN]->(b)
+        WHERE "%s" in r.sent_id
+        Return r;
+        """ % (edge[':START_ID'], edge[':END_ID'],  edge['sent_id:string[]'])
+        f = graph.run(quer)
+        if len(f.data()) == 0:
+            sent_s = '['
+            for i in edge['sent_id:string[]'].split(';'):
+                sent_s += '"' + i + '"' + ','
+            sent_s = sent_s[:-1] + ']'
+            quer = """
+            Match (a:Entity {cui:"%s"}), (b:Article {pmcid:"%s"})
+            MERGE (a)-[r:MENTIONED_IN]->(b)
+            ON MATCH SET r.score = r.score + %s, r.sent_id = r.sent_id + %s
+            ON CREATE SET r.score = %s, r.sent_id = %s
+            """ % (edge[':START_ID'], edge[':END_ID'], 
+                   str([int(i) for i in edge['score:float[]'].split(';')]), sent_s,
+                   str([int(i) for i in edge['score:float[]'].split(';')]), sent_s)
+            f = graph.run(quer)
+            total_rel += f.stats()['relationships_created']
+        if c % 1000 == 0 and c>999:
+            print "At: %d -- %0.2f %%" % (c, 100*c/float(len(entity_pmc_edges)))
+    time_log('# Mentions %d' % c)
+    time_log('Finally added %d new mentions!' % total_rel)
 
 
 
@@ -412,9 +554,31 @@ def update_neo4j(results):
     user = settings['neo4j']['user']
     password = settings['neo4j']['password']
     try:
-        graph = py2neo.Graph(host=host, port=port, user=user, password=pass)
+        graph = py2neo.Graph(host=host, port=port, user=user, password=password)
     except Exception, e:
-        print Exception, e
-        print("Couldn't connect to db! Check settings!")
+        #time_log(e)
+        #time_log("Couldn't connect to db! Check settings!")
         exit(2)
     graph_new = py2neo.Graph()
+    for nodes in results['nodes']:
+        if nodes['type'] == 'Article':
+            id_ = 'pmcid'
+        elif nodes['type'] == 'Entity':
+            id_ = 'cui'
+        else:
+            id_ = None
+        if id_ is None:
+            time_log('Specific node type not handled! You have to update the code!')
+            raise NotImplementedError
+        populate_nodes(graph, nodes['values'], nodes['type'], id_)
+    for edges in results['edges']:
+        if edges['type'] == 'relation':
+            time_log('~~~~~~  Will create Relations Between Entities edges ~~~~~~')
+            populate_relation_edges(graph, edges['values'])
+        elif edges['type'] == 'mention':
+            time_log('~~~~~~  Will create Mentioned In edges ~~~~~~')
+            populate_mentioned_edges(graph, edges['values'])
+        else:
+            time_log('Specific node type not handled! You have to update the code!')
+            raise NotImplementedError 
+
