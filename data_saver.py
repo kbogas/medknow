@@ -490,7 +490,7 @@ def populate_relation_edges(graph, relations_edges):
             total_rel += f.stats()['relationships_created']
         if c % 1000 == 0 and c > 999:
             time_log('Process: %d -- %0.2f %%' % (c, 100*c/float(len(relations_edges))))
-    time_log('# Relations %d' % c)
+    time_log('#Relations :%d' % c)
     time_log('Finally added %d new relations!' % total_rel)
 
 def populate_mentioned_edges(graph, entity_pmc_edges):
@@ -531,8 +531,8 @@ def populate_mentioned_edges(graph, entity_pmc_edges):
             f = graph.run(quer)
             total_rel += f.stats()['relationships_created']
         if c % 1000 == 0 and c>999:
-            print "At: %d -- %0.2f %%" % (c, 100*c/float(len(entity_pmc_edges)))
-    time_log('# Mentions %d' % c)
+            time_log("Process: %d -- %0.2f %%" % (c, 100*c/float(len(entity_pmc_edges))))
+    time_log('#Mentions: %d' % c)
     time_log('Finally added %d new mentions!' % total_rel)
 
 
