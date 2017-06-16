@@ -433,9 +433,9 @@ def parse_medical_rec():
     Parse file containing medical records.
     Output:
         - json_ : dic,
-        json-style dictionary with field medical_records containing
-        a list of dicts, with field text, containing the medical record
-        json_ = {'medical_records': [{'text':...}, {'text':...}]}
+        json-style dictionary with documents containing
+        a list of dicts, containing the medical record and the corresponding
+        attributes
     """
 
     # input file path from settings.yaml
@@ -467,8 +467,6 @@ def parse_medical_rec():
     diag[out_idfield] = diag[idfield]
     del diag[idfield]
     json_ = {docfield: diag.to_dict(orient='records')}
-    #for text in texts:
-    #    json_[docfield].append({out_textfield: text})
     return json_
 
 
@@ -477,10 +475,9 @@ def parse_json():
     Parse file containing articles.
     Output:
         - json_ : dic,
-        json-style dictionary with field documents containing
+        json-style dictionary with documents containing
         a list of dicts, with field text, containing the attributes of
         the article
-        json_ = {'documents': [{...}, {...}]}
     """
 
     # input file path from settings.yaml
@@ -511,13 +508,33 @@ def parse_json():
         article[out_textfield] = article.pop(textfield)
         article[out_idfield] = article.pop(idfield)
         article[out_labelfield] = article.pop(labelfield)
-        #del article[textfield]
-        #del article[idfield]
     json_[out_outfield] = json_.pop(outfield)
-    #del json[outfield]
     return json_
 
+def parse_edges():
+    """
+    Parse file containing edges-relations between nodes.
+    Output:
+        - json_ : dic,
+        json-style dictionary with field medical_records containing
+        a list of dicts, with field text, containing the medical record
+        json_ = {'medical_records': [{'text':...}, {'text':...}]}
+    """
 
+    # input file path from settings.yaml
+    inp_path = settings['load']['edges']['inp_path']
+    with open(inp_path, 'r') as f:
+        json_ = json.load(f, encoding='utf-8')
+    
+
+    # docfield containing list of elements
+    out_outfield = settings['out']['json']['json_doc_field']
+    # textfield to read text from
+    out_textfield = settings['out']['json']['json_text_field']
+    # idfield where id of document is stored
+    out_idfield = settings['out']['json']['json_id_field']
+    # labelfield where title of the document is stored
+    out_labelfield = settings['out']['json']['json_label_field']
 
 
 #results = extract_entities(text)

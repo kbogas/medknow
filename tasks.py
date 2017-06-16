@@ -8,7 +8,7 @@
 
 from config import settings
 from utilities import time_log
-from data_loader import parse_medical_rec, parse_json, extract_semrep
+from data_loader import parse_medical_rec, parse_json, parse_edges, extract_semrep
 from data_saver import save_csv, save_neo4j, save_json, create_neo4j_results, \
                         create_neo4j_csv, update_neo4j
 
@@ -23,7 +23,7 @@ class Parser(object):
     def __init__(self, key, name=None):
         """
         Initialization of the class. Currently keys are:
-        ['med_rec', 'json']. The name is only for pretty-printing
+        ['med_rec', 'json', 'edges']. The name is only for pretty-printing
         purposes.
         """
 
@@ -32,6 +32,8 @@ class Parser(object):
             self.func = parse_medical_rec
         elif self.key == 'json':
             self.func = parse_json
+        elif self.key == 'edges':
+            self.func = parse_edges
         if name:
             self.name = name
         else:
