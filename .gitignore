@@ -13,3 +13,6 @@ __pycache__/
 # pyenv
 .python-version
 
+# Specific files
+settings.yaml
+
