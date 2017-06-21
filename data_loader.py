@@ -323,6 +323,7 @@ def semrep_wrapper(text):
     cmd = "echo " + text + " | ./semrep.v1.7 -L 2015 -Z 2015AA -F"
     semrep_dir = settings['load']['path']['semrep']
     lines = runProcess(cmd, semrep_dir)
+    print lines
     # mapping of line elements to fields
     mappings = {
         "text": {
@@ -454,8 +455,6 @@ def parse_medical_rec():
     docfield = settings['out']['json']['json_doc_field']
     # textfield to read text from
     out_textfield = settings['out']['json']['json_text_field']
-    # idfield where id of document is stored
-    out_idfield = settings['out']['json']['json_id_field']
     # labelfield where title of the document is stored
     out_labelfield = settings['out']['json']['json_label_field']
     diag[out_labelfield] = ['Medical Record' + str(i) for i in diag.index.values.tolist()]
@@ -464,7 +463,7 @@ def parse_medical_rec():
     diag[out_textfield] = diag[textfield]
     del diag[textfield]
     # Replace id with default out_idfield
-    diag[out_idfield] = diag[idfield]
+    diag['id'] = diag[idfield]
     del diag[idfield]
     json_ = {docfield: diag.to_dict(orient='records')}
     return json_
@@ -500,14 +499,15 @@ def parse_json():
     out_outfield = settings['out']['json']['json_doc_field']
     # textfield to read text from
     out_textfield = settings['out']['json']['json_text_field']
-    # idfield where id of document is stored
-    out_idfield = settings['out']['json']['json_id_field']
     # labelfield where title of the document is stored
     out_labelfield = settings['out']['json']['json_label_field']
-    for article in json_[outfield][:10]:
+    for article in json_[outfield]:
         article[out_textfield] = article.pop(textfield)
-        article[out_idfield] = article.pop(idfield)
-        article[out_labelfield] = article.pop(labelfield)
+        article['id'] = article.pop(idfield)
+        if labelfield != 'None':
+            article[out_labelfield] = article.pop(labelfield)
+        else:
+            article[out_labelfield] = ' '
     json_[out_outfield] = json_.pop(outfield)
     return json_
 
@@ -578,12 +578,10 @@ def get_concepts_from_edges(json_, key):
                 else:
                     sem_types = ent['sem_types']
 
-                triple_subj = [{'cui:ID': ent['cuid'], 
+                triple_subj = [{'id:ID': ent['cuid'], 
                                 'label': ent['label'], 
                                 'sem_types:string[]': sem_types}]
-            elif (sub_source == 'PMC') or (sub_source == 'TEXT'):
-                triple_subj = [{'pmcid:ID': triple['s']}]
-            elif sub_source == 'None':
+            elif (sub_source == 'PMC') or (sub_source == 'TEXT') or (sub_source == 'None'):
                 triple_subj = [{'id:ID': triple['s']}]
             else:
                 if not(triple['s'] in cache):
@@ -600,7 +598,7 @@ def get_concepts_from_edges(json_, key):
                     else:
                         sem_types = ent['sem_types']
 
-                    triple_subj.append({'cui:ID': ent['cuid'], 
+                    triple_subj.append({'id:ID': ent['cuid'], 
                                     'label': ent['label'], 
                                     'sem_types:string[]': sem_types})
             if obj_source == 'UMLS':
@@ -615,12 +613,10 @@ def get_concepts_from_edges(json_, key):
                     sem_types = ';'.join(ent['sem_types'].split(','))
                 else:
                     sem_types = ent['sem_types']
-                triple_obj = [{'cui:ID': ent['cuid'], 
+                triple_obj = [{'id:ID': ent['cuid'], 
                                 'label': ent['label'], 
                                 'sem_types:string[]': sem_types}]
-            elif (obj_source == 'PMC') or (obj_source == 'TEXT'):
-                obj_subj = [{'pmcid:ID': triple['o']}]
-            elif obj_source == 'None':
+            elif (obj_source == 'PMC') or (obj_source == 'TEXT') or (obj_source == 'None'):
                 triple_obj = [{'id:ID': triple['o']}]
             else:
                 if not(triple['o'] in cache):
@@ -637,7 +633,7 @@ def get_concepts_from_edges(json_, key):
                     else:
                         sem_types = ent['sem_types']
 
-                    triple_obj.append({'cui:ID': ent['cuid'], 
+                    triple_obj.append({'id:ID': ent['cuid'], 
                                     'label': ent['label'], 
                                     'sem_types:string[]': sem_types})
             combs = product(triple_subj, triple_obj)

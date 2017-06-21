@@ -213,9 +213,9 @@ def create_neo4j_edges(json_):
         else:
             if not(edge['o'] in other_nodes_obj):
                 other_nodes_obj.append(edge['o'])
-        sub_id_key = next((key for key in edge['s'].keys() if ':ID' in key), None)
-        obj_id_key = next((key for key in edge['o'].keys() if ':ID' in key), None)
-        results['edges'][0]['values'].append({':START_ID':edge['s'][sub_id_key], ':TYPE':edge['p'], ':END_ID':edge['o'][obj_id_key]})
+        #sub_id_key = next((key for key in edge['s'].keys() if ':ID' in key), None)
+        #obj_id_key = next((key for key in edge['o'].keys() if ':ID' in key), None)
+        results['edges'][0]['values'].append({':START_ID':edge['s']['id:ID'], ':TYPE':edge['p'], ':END_ID':edge['o']['id:ID']})
     if entities_nodes:
         results['nodes'].append({'type': 'Entity', 'values': entities_nodes})
     if articles_nodes:
@@ -252,7 +252,10 @@ def create_neo4j_harvester(json_):
     out_idfield = settings['out']['json']['json_id_field']
     # labelfield where the label is located
     out_labelfield = settings['out']['json']['json_label_field']
-
+    # Sentence Prefix
+    sent_prefix = settings['out']['json']['sent_prefix']
+    if sent_prefix == 'None' or not(sent_prefix):
+        sent_prefix = ''
     entities_nodes = []
     unique_sent = {}
     articles_nodes = []
@@ -261,10 +264,8 @@ def create_neo4j_harvester(json_):
     unique_cuis = []
     for doc in json_[out_outfield]:
         pmid = doc[out_idfield]
-        tmp_sents = []
         for sent in doc['sents']:
-            cur_sent_id = str(pmid)+'_'+sent['sent_id']
-            tmp_sents.append(cur_sent_id)
+            cur_sent_id = str(pmid)+'_' + sent_prefix + '_' +  sent['sent_id']
             unique_sent[cur_sent_id] = sent['sent_text']
             for ent in sent['entities']:
                 if ent['cuid']:
@@ -279,7 +280,7 @@ def create_neo4j_harvester(json_):
                         else:
                             sem_types = ent['sem_types']
                         #if not(ent['cuid']):
-                        entities_nodes.append({'cui:ID': ent['cuid'], 
+                        entities_nodes.append({'id:ID': ent['cuid'], 
                                          'label': ent['label'], 
                                          'sem_types:string[]': sem_types})
                     entity_pmc_edges.append({':START_ID': ent['cuid'],
@@ -298,10 +299,9 @@ def create_neo4j_harvester(json_):
                                      'sent_id:string[]': cur_sent_id,
                                      'negation:string[]': rel['negation'],
                                      ':END_ID': rel['object__cui']})            
-        articles_nodes.append({'pmcid:ID': doc[out_idfield], 
+        articles_nodes.append({'id:ID': doc[out_idfield], 
                                'title': doc[out_labelfield], 
-                               'journal': doc['journal'], 
-                                'sent_id:string[]': ';'.join(tmp_sents)})
+                               'journal': doc['journal']})
     entity_pmc_edges = aggregate_mentions(entity_pmc_edges)
     relations_edges = aggregate_relations(relations_edges)
     results = {'nodes': [{'type': 'Entity', 'values': entities_nodes}, {'type': 'Article', 'values': articles_nodes}],
@@ -354,8 +354,8 @@ def create_neo4j_csv(results):
     }
 
     dic_fiels = {
-        'entities.csv': ['cui:ID', 'label', 'sem_types:string[]'],
-        'articles.csv': ['pmcid:ID', 'title', 'journal','sent_id:string[]'],
+        'entities.csv': ['id:ID', 'label', 'sem_types:string[]'],
+        'articles.csv': ['id:ID', 'title', 'journal','sent_id:string[]'],
         'other_nodes.csv': ['id:ID'],
         'entities_pmc.csv':[':START_ID','score:float[]','sent_id:string[]', ':END_ID'], 
         'relations.csv':[':START_ID','subject_score:float[]','subject_sem_type:string[]',':TYPE','pred_type:string[]', 'object_score:float[]','object_sem_type:string[]','sent_id:string[]','negation:string[]',':END_ID'],
@@ -414,7 +414,7 @@ def fix_on_create_nodes(node):
     return s
 
 
-def create_merge_query(node, type_, id_):
+def create_merge_query(node, type_):
     """
     Creating the whole merge and update cypher query for a node.
     Input:
@@ -423,19 +423,17 @@ def create_merge_query(node, type_, id_):
         node
         - type_: str,
         type of the node to be merged
-        - id_ : str,
-        id attribute against which existing nodes will be matched
     Output:
         - quer: str,
         the complete cypher query ready to be run
     """
     quer = """
-    MERGE (a:%s {%s:"%s"})
-    %s""" % (type_, id_, node[id_+":ID"], fix_on_create_nodes(node))
+    MERGE (a:%s {id:"%s"})
+    %s""" % (type_, node["id:ID"], fix_on_create_nodes(node))
     return quer
 
 
-def populate_nodes(graph, nodes, type_, id_):
+def populate_nodes(graph, nodes, type_):
     """
     Function that actually calls the cypher query and populates the graph
     with nodes of type_, merging on already existing nodes on their id_.
@@ -446,8 +444,6 @@ def populate_nodes(graph, nodes, type_, id_):
         list of dics containing the attributes of each node
         - type_: str,
         type of the node to be merged
-        - id_ : str,
-        id attribute against which existing nodes will be matched
     Output: None, populates the db.
     """
     c = 0
@@ -455,8 +451,7 @@ def populate_nodes(graph, nodes, type_, id_):
     time_log('~~~~~~  Will create nodes of type: %s  ~~~~~~' % type_)
     for ent in nodes:
         c += 1
-        quer = create_merge_query(ent, type_, id_)
-        print quer
+        quer = create_merge_query(ent, type_)
         f = graph.run(quer)
         total_rel += f.stats()['nodes_created']
         if c % 1000 == 0 and c > 999:
@@ -480,7 +475,7 @@ def populate_relation_edges(graph, relations_edges):
     for edge in relations_edges:
         c +=1  
         quer = """
-        Match (a:Entity {cui:"%s"}), (b:Entity {cui:"%s"})
+        Match (a:Entity {id:"%s"}), (b:Entity {id:"%s"})
         MATCH (a)-[r:%s]->(b)
         WHERE "%s" in r.sent_id
         Return r;
@@ -504,7 +499,7 @@ def populate_relation_edges(graph, relations_edges):
                 neg_s += '"' + i + '"' + ','
             neg_s = neg_s[:-1] + ']'
             quer = """
-            Match (a:Entity {cui:"%s"}), (b:Entity {cui:"%s"})
+            Match (a:Entity {id:"%s"}), (b:Entity {id:"%s"})
             MERGE (a)-[r:%s]->(b)
             ON MATCH SET r.subject_score = r.subject_score + %s, r.subject_sem_type = r.subject_sem_type + %s,
             r.object_score = r.object_score + %s, r.object_sem_type = r.object_sem_type + %s,
@@ -541,7 +536,7 @@ def populate_mentioned_edges(graph, entity_pmc_edges):
     for edge in entity_pmc_edges:
         c += 1
         quer = """
-        Match (a:Entity {cui:"%s"}), (b:Article {pmcid:"%s"})
+        Match (a:Entity {id:"%s"}), (b:Article {id:"%s"})
         MATCH (a)-[r:MENTIONED_IN]->(b)
         WHERE "%s" in r.sent_id
         Return r;
@@ -553,7 +548,7 @@ def populate_mentioned_edges(graph, entity_pmc_edges):
                 sent_s += '"' + i + '"' + ','
             sent_s = sent_s[:-1] + ']'
             quer = """
-            Match (a:Entity {cui:"%s"}), (b:Article {pmcid:"%s"})
+            Match (a:Entity {id:"%s"}), (b:Article {id:"%s"})
             MERGE (a)-[r:MENTIONED_IN]->(b)
             ON MATCH SET r.score = r.score + %s, r.sent_id = r.sent_id + %s
             ON CREATE SET r.score = %s, r.sent_id = %s
@@ -583,26 +578,15 @@ def populate_new_edges(graph, new_edges):
     total_rel = 0
     # field containing the type of the node for the subject
     sub_type = settings['load']['edges']['sub_type']
-    if sub_type == 'Entity':
-        sub_id = 'cui'
-    elif sub_type == 'Article':
-        sub_id = 'pmcid'
-    else:
-        sub_id = 'id'
     # field containing the type of the node for the object
     obj_type = settings['load']['edges']['obj_type']
-    if obj_type == 'Entity':
-        obj_id = 'cui'
-    elif sub_type == 'Article':
-        obj_id = 'pmcid'
-    else:
-        obj_id = 'id'
+
     for edge in new_edges:
         c += 1
         quer = """
-        MATCH (a:%s {%s:"%s"}), (b:%s {%s:"%s"})
+        MATCH (a:%s {id:"%s"}), (b:%s {id:"%s"})
         MERGE (a)-[r:%s]->(b)
-        """ % (sub_type, sub_id, edge[':START_ID'], obj_type, obj_id, edge[':END_ID'], edge[':TYPE'],)
+        """ % (sub_type, edge[':START_ID'], obj_type, edge[':END_ID'], edge[':TYPE'],)
         f = graph.run(quer)
         total_rel += f.stats()['relationships_created']
         if c % 1000 == 0 and c > 999:
@@ -636,25 +620,16 @@ def update_neo4j(results):
         exit(2)
     graph_new = py2neo.Graph()
     for nodes in results['nodes']:
-        if nodes['type'] == 'Article':
-            id_ = 'pmcid'
-        elif nodes['type'] == 'Entity':
-            id_ = 'cui'
-        else:
-            id_ = 'id'
-        if id_ is None:
-            time_log('Specific node type not handled! You have to update the code!')
-            raise NotImplementedError
-        populate_nodes(graph, nodes['values'], nodes['type'], id_)
+        populate_nodes(graph, nodes['values'], nodes['type'])
     for edges in results['edges']:
         if edges['type'] == 'relation':
-            time_log('~~~~~~  Will create Relations Between Entities edges ~~~~~~')
+            time_log('~~~~~~  Will create Relations Between Entities ~~~~~~')
             populate_relation_edges(graph, edges['values'])
         elif edges['type'] == 'mention':
-            time_log('~~~~~~  Will create Mentioned In edges ~~~~~~')
+            time_log('~~~~~~  Will create Mentioned In  ~~~~~~')
             populate_mentioned_edges(graph, edges['values'])
         elif edges['type'] == 'NEW':
-            time_log('~~~~~~  Will create new-type of nodes edges ~~~~~~')
+            time_log('~~~~~~  Will create new-type of edges~~~~~~')
             populate_new_edges(graph, edges['values'])
         else:
             time_log('Specific node type not handled! You have to update the code!')
