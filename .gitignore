@@ -15,4 +15,4 @@ __pycache__/
 
 # Specific files
 settings.yaml
-
+*.yaml

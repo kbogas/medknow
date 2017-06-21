@@ -8,19 +8,24 @@ Utility functions.
 
 import time
 import logging
+import requests
+import json
 from config import settings
 from Authentication import Authentication
 
 
 # API-kEY FOR UMLS REST TICKET SERVICES
-umls_api = settings['api']['umls']
+umls_api = settings['apis']['umls']
 # UMLS REST SERVICES INITIALIZATION OF CLIENT AND TICKET
 # GRANTING SERVICE TO BE USED IN ALL CASES
 AuthClient = Authentication(umls_api)
 tgt = AuthClient.gettgt()
 
 
-def get_umls_ticket(apikey=None):
+logging.getLogger("requests").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+def get_umls_ticket(apikey=None, AuthClient=AuthClient, tgt=tgt):
     """
     Get a single use ticket for the UMLS REST services.
     It is supposed that an Author Client and a Ticket
@@ -85,12 +90,18 @@ def get_concept_from_source(source_id, source, apikey=None):
     url = "https://uts-ws.nlm.nih.gov/rest/search/current"
     r = requests.get(url, params=params)
     r.encoding = 'utf-8'
-    items = json.loads(r.text)
-    jsonData = items["result"]
-    # Get cuis related to source_id
-    cuis = [res['ui']for res in jsonData['results']]
-    # Get concepts from cuis
-    concepts = [get_concept_from_cui(cui, apikey) for cui in cuis]
+    concepts = []
+    if r.ok:
+        items = json.loads(r.text)
+        jsonData = items["result"]
+        # Get cuis related to source_id
+        cuis = [res['ui']for res in jsonData['results']]
+        # Get concepts from cuis
+        concepts = [get_concept_from_cui(cui, apikey) for cui in cuis]
+    else:
+        time_log(r.url)
+        time_log('Error getting concept from: Source %s   | ID: %s' % (source, source_id))
+        raise ValueError
     return concepts
 
 
@@ -115,20 +126,26 @@ def get_concept_from_cui(cui, apikey=None):
     url = "https://uts-ws.nlm.nih.gov/rest/content/current/CUI/" + cui
     r = requests.get(url, params={'ticket': ticket})
     r.encoding = 'utf-8'
-    items = json.loads(r.text)
-    jsonData = items["result"]
-    res = {'label': jsonData['name'], 'cuid': cui}
-    sem_types = []
-    # For each semantic type of the entity
-    for stys in jsonData["semanticTypes"]:
-        # Keep only the TUI code from the uri e.g.
-        # https://uts-ws.nlm.nih.gov/rest/semantic-network/current/TUI/T116
-        code_tui = stys['uri'].split('/')[-1]
-        # Fetch the abbreviation of this TUI code
-        sem_types.append(get_sem_type_abbr(code_tui, apikey))
-    # Comma separated string
-    sem_types = ",".join(sem_types)
-    res['sem_types'] = sem_types
+    res = {}
+    if r.ok:
+        items = json.loads(r.text)
+        jsonData = items["result"]
+        res = {'label': jsonData['name'], 'cuid': cui}
+        sem_types = []
+        # For each semantic type of the entity
+        for stys in jsonData["semanticTypes"]:
+            # Keep only the TUI code from the uri e.g.
+            # https://uts-ws.nlm.nih.gov/rest/semantic-network/current/TUI/T116
+            code_tui = stys['uri'].split('/')[-1]
+            # Fetch the abbreviation of this TUI code
+            sem_types.append(get_sem_type_abbr(code_tui, apikey))
+        # Comma separated string
+        sem_types = ",".join(sem_types)
+        res['sem_types'] = sem_types
+    else:
+        time_log(r.url)
+        time_log('Error getting concept from cui : %s' % cui)
+        raise ValueError
     return res
 
 
@@ -150,6 +167,13 @@ def get_sem_type_abbr(code_tui, apikey=None):
     url = "https://uts-ws.nlm.nih.gov/rest/semantic-network/current/TUI/" + code_tui
     r = requests.get(url, params={'ticket': ticket})
     r.encoding = 'utf-8'
-    items = json.loads(r.text)
-    jsonData = items["result"]
-    return jsonData['abbreviation']
+    res = ' '
+    if r.ok:
+        items = json.loads(r.text)
+        jsonData = items["result"]
+        res = jsonData['abbreviation']
+    else:
+        time_log(r.url)
+        time_log('Error getting sem-type from TUI : %s' % code_tui)
+        raise ValueError
+    return res

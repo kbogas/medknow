@@ -17,8 +17,8 @@ import unicodecsv as csv2
 import pandas as pd
 from nltk.tokenize import sent_tokenize
 from config import settings
-from utilities import time_log
-
+from utilities import time_log, get_concept_from_cui, get_concept_from_source
+from itertools import product
 
 
 
@@ -414,9 +414,9 @@ def extract_semrep(json_, key):
         the previous json-style dictionary enriched with medical concepts
     """
     # outerfield for the documents in json
-    docfield = settings['out']['json']['json_doc_field']
+    docfield = settings['out'][key]['json_doc_field']
     # textfield to read text from
-    textfield = settings['out']['json']['json_text_field']
+    textfield = settings['out'][key]['json_text_field']
     N = len(json_[docfield])
     for i, doc in enumerate(json_[docfield]):
         text = clean_text(doc[textfield])
@@ -504,38 +504,149 @@ def parse_json():
     out_idfield = settings['out']['json']['json_id_field']
     # labelfield where title of the document is stored
     out_labelfield = settings['out']['json']['json_label_field']
-    for article in json_[outfield]:
+    for article in json_[outfield][:10]:
         article[out_textfield] = article.pop(textfield)
         article[out_idfield] = article.pop(idfield)
         article[out_labelfield] = article.pop(labelfield)
     json_[out_outfield] = json_.pop(outfield)
     return json_
 
+
 def parse_edges():
     """
     Parse file containing edges-relations between nodes.
     Output:
         - json_ : dic,
-        json-style dictionary with field medical_records containing
-        a list of dicts, with field text, containing the medical record
-        json_ = {'medical_records': [{'text':...}, {'text':...}]}
+        json-style dictionary with a field containing
+        relations
     """
 
     # input file path from settings.yaml
     inp_path = settings['load']['edges']['inp_path']
     with open(inp_path, 'r') as f:
         json_ = json.load(f, encoding='utf-8')
-    
-
-    # docfield containing list of elements
-    out_outfield = settings['out']['json']['json_doc_field']
-    # textfield to read text from
-    out_textfield = settings['out']['json']['json_text_field']
-    # idfield where id of document is stored
-    out_idfield = settings['out']['json']['json_id_field']
-    # labelfield where title of the document is stored
-    out_labelfield = settings['out']['json']['json_label_field']
+    return json_
 
 
-#results = extract_entities(text)
-#results = enrich_with_triples(results, subject='Text Title')
+def get_concepts_from_edges(json_, key):
+    """
+    Get concept-specific info related to an entity from a list
+    containing relations. Each subject-object in the relations
+    list is expressed in a another data source(MESH, DRUGBANK etc)
+    and their unique identifier is provided. Also, articles and new
+    kinde of sub-obj are handled.
+    Input:
+        - json: dict,
+        json-style dictionary with a field containing
+        relations
+        - key : str,
+        string denoting the type of medical text to read from. Used to
+        find the correct paragraph in the settings.yaml file.
+    Output:
+        - json: dict,
+        the updated json-style dictionary where the relations
+        in the list have been updated and each subject-object has been
+        mapped to the according
+
+    """
+
+    # docfield containing list of elements containing the relations
+    outfield = settings['load'][key]['edge_field']
+    # field containing the type of the node for the subject
+    sub_type = settings['load'][key]['sub_type']
+    # field containing the source of the node for the subject
+    sub_source = settings['load'][key]['sub_source']
+    # field containing the type of the node for the object
+    obj_type = settings['load'][key]['obj_type']
+    # field containing the source of the node for the object
+    obj_source = settings['load'][key]['obj_source']
+    new_relations = []
+    # Cache used to avoid retrieving the same concepts
+    cache = {}
+    for ii, triple in enumerate(json_[outfield][:10]):
+        try:
+            if sub_source == 'UMLS':
+                if not(triple['s'] in cache):
+                    ent = get_concept_from_cui(triple['s'])
+                    cache[triple['s']] = ent
+                else:
+                    ent = cache[triple['s']]
+                if (type(ent['sem_types']) == list and len(ent['sem_types']) > 1):
+                    sem_types = ';'.join(ent['sem_types'])
+                elif (',' in ent['sem_types']):
+                    sem_types = ';'.join(ent['sem_types'].split(','))
+                else:
+                    sem_types = ent['sem_types']
+
+                triple_subj = [{'cui:ID': ent['cuid'], 
+                                'label': ent['label'], 
+                                'sem_types:string[]': sem_types}]
+            elif (sub_source == 'PMC') or (sub_source == 'TEXT'):
+                triple_subj = [{'pmcid:ID': triple['s']}]
+            elif sub_source == 'None':
+                triple_subj = [{'id:ID': triple['s']}]
+            else:
+                if not(triple['s'] in cache):
+                    ents = get_concept_from_source(triple['s'], sub_source)
+                    cache[triple['s']] = ents
+                else:
+                    ents = cache[triple['s']]
+                triple_subj = []
+                for ent in ents:
+                    if (type(ent['sem_types']) == list and len(ent['sem_types']) > 1):
+                        sem_types = ';'.join(ent['sem_types'])
+                    elif (',' in ent['sem_types']):
+                        sem_types = ';'.join(ent['sem_types'].split(','))
+                    else:
+                        sem_types = ent['sem_types']
+
+                    triple_subj.append({'cui:ID': ent['cuid'], 
+                                    'label': ent['label'], 
+                                    'sem_types:string[]': sem_types})
+            if obj_source == 'UMLS':
+                if not(triple['o'] in cache):
+                    ent = get_concept_from_cui(triple['o'])
+                    cache[triple['o']] = ent
+                else:
+                    ent = cache[triple['o']]
+                if (type(ent['sem_types']) == list and len(ent['sem_types']) > 1):
+                    sem_types = ';'.join(ent['sem_types'])
+                elif (',' in ent['sem_types']):
+                    sem_types = ';'.join(ent['sem_types'].split(','))
+                else:
+                    sem_types = ent['sem_types']
+                triple_obj = [{'cui:ID': ent['cuid'], 
+                                'label': ent['label'], 
+                                'sem_types:string[]': sem_types}]
+            elif (obj_source == 'PMC') or (obj_source == 'TEXT'):
+                obj_subj = [{'pmcid:ID': triple['o']}]
+            elif obj_source == 'None':
+                triple_obj = [{'id:ID': triple['o']}]
+            else:
+                if not(triple['o'] in cache):
+                    ents = get_concept_from_source(triple['o'], obj_source)
+                    cache[triple['o']] = ents
+                else:
+                    ents = cache[triple['o']]
+                triple_obj = []
+                for ent in ents:
+                    if (type(ent['sem_types']) == list and len(ent['sem_types']) > 1):
+                        sem_types = ';'.join(ent['sem_types'])
+                    elif (',' in ent['sem_types']):
+                        sem_types = ';'.join(ent['sem_types'].split(','))
+                    else:
+                        sem_types = ent['sem_types']
+
+                    triple_obj.append({'cui:ID': ent['cuid'], 
+                                    'label': ent['label'], 
+                                    'sem_types:string[]': sem_types})
+            combs = product(triple_subj, triple_obj)
+            for comb in combs:
+                new_relations.append({'s':comb[0], 'p':triple['p'], 'o':comb[1]})
+        except Exception, e:
+            time_log('S: %s | P: %s | O: %s' % (triple['s'],triple['p'],triple['o']))
+            time_log('Skipped the above edge! Probably due to concept-fetching errors!')
+        if ii % 1000 == 0 and ii > 999:
+            time_log("Edges Transformation Process: %d -- %0.2f %%" % (ii, 100*ii/float(len(json_[outfield]))))
+    json_[outfield] = new_relations
+    return json_

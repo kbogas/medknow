@@ -7,6 +7,8 @@
 
 import logging
 from tasks import taskCoordinator
+from config import settings
+
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
 

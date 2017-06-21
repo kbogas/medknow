@@ -178,22 +178,61 @@ def create_neo4j_edges(json_):
         neo4j. Each element in the list has a 'type' field denoting the type
         of the node/edge and the 'value' field containg the nodes/edges
     """
-    edgefield = settings['load']['edges']['edge_file']
-    for edge in json_[edgefield]:
-        #pass
+    # docfield containing list of elements containing the relations
+    edgefield = settings['load']['edges']['edge_field']
+    # field containing the type of the node for the subject
+    sub_type = settings['load']['edges']['sub_type']
+    # field containing the source of the node for the subject
+    sub_source = settings['load']['edges']['sub_source']
+    # field containing the type of the node for the object
+    obj_type = settings['load']['edges']['obj_type']
+    # field containing the source of the node for the object
+    obj_source = settings['load']['edges']['obj_source']
+    results = {'nodes':[], 'edges':[{'type':'NEW', 'values':[]}]}
+    entities_nodes = []
+    articles_nodes = []
+    other_nodes_sub = []
+    other_nodes_obj = []
 
-        results = {'nodes': [{'type': 'Entity', 'values': entities_nodes}, {'type': 'Article', 'values': articles_nodes}],
-               'edges': [{'type': 'relation', 'values': relations_edges}, {'type': 'mention', 'values': entity_pmc_edges}]
-               }
+    for edge in json_[edgefield]:
+        if sub_type == 'Entity':
+            if not(edge['s'] in entities_nodes):
+                entities_nodes.append(edge['s'])
+        elif sub_type == 'Article':
+            if not(edge['s'] in articles_nodes):
+                articles_nodes.append(edge['s'])
+        else:
+            if not(edge['s'] in other_nodes_sub):
+                other_nodes_sub.append(edge['s'])
+        if obj_type == 'Entity':
+            if not(edge['o'] in entities_nodes):
+                entities_nodes.append(edge['o'])
+        elif obj_type == 'Article':
+            if not(edge['o'] in articles_nodes):
+                articles_nodes.append(edge['o'])
+        else:
+            if not(edge['o'] in other_nodes_obj):
+                other_nodes_obj.append(edge['o'])
+        sub_id_key = next((key for key in edge['s'].keys() if ':ID' in key), None)
+        obj_id_key = next((key for key in edge['o'].keys() if ':ID' in key), None)
+        results['edges'][0]['values'].append({':START_ID':edge['s'][sub_id_key], ':TYPE':edge['p'], ':END_ID':edge['o'][obj_id_key]})
+    if entities_nodes:
+        results['nodes'].append({'type': 'Entity', 'values': entities_nodes})
+    if articles_nodes:
+        results['nodes'].append({'type': 'Article', 'values': articles_nodes})
+    if other_nodes_sub:
+        results['nodes'].append({'type': sub_type, 'values': other_nodes_sub})
+    if other_nodes_obj:
+        results['nodes'].append({'type': obj_type, 'values': other_nodes_obj})
+    return results
 
 def create_neo4j_harvester(json_):
     """
     Function that takes the enriched json_ file and generates the nodes
     and relationships entities needed for creating/updating the neo4j database.
     Currently supporting: 
-        - Nodes: ['Articles(PMC)', 'Entities(MetaMapConcepts)', 'MESH(Headings)'] 
-        - Edges: ['Relations between Entities', 'Entity:MENTIONED_IN:Article'
-                  'Entiy:HAS_MESH:MESH']
+        - Nodes: ['Articles(PMC)', 'Entities(UMLS-Concepts)'] 
+        - Edges: ['Relations between Entities', 'Entity:MENTIONED_IN:Article']
     Input:
         - json_: dic,
         json-style dictionary generated from the extractors in the
@@ -220,26 +259,15 @@ def create_neo4j_harvester(json_):
     entity_pmc_edges = []
     relations_edges = []
     unique_cuis = []
-    #cui_to_mesh_path = settings['load']['mesh']['path']
-    #with open(cui_to_mesh_path, 'r') as f:
-    #    mapping = json.load(f)['cuis']
     for doc in json_[out_outfield]:
         pmid = doc[out_idfield]
         tmp_sents = []
-        #doc_mesh = []
         for sent in doc['sents']:
             cur_sent_id = str(pmid)+'_'+sent['sent_id']
             tmp_sents.append(cur_sent_id)
             unique_sent[cur_sent_id] = sent['sent_text']
             for ent in sent['entities']:
                 if ent['cuid']:
-                    #if (ent['cuid'] in mapping):
-                    #    doc_mesh.append(ent['cuid'])
-                    #    cur_map = mapping[ent['cuid']]
-                    #    for i, id_ in enumerate(cur_map['ids']):
-                    #        if not(id_ in unique_mesh):
-                    #            unique_mesh.append(id_)
-                    #            mesh_nodes.append({'mesh_id:ID': id_, 'label': cur_map['labels'][i]})
                     if ent['cuid'] in unique_cuis:
                         continue
                     else:
@@ -274,15 +302,6 @@ def create_neo4j_harvester(json_):
                                'title': doc[out_labelfield], 
                                'journal': doc['journal'], 
                                 'sent_id:string[]': ';'.join(tmp_sents)})
-        #for doc_cui in doc_mesh:
-        #    try:
-        #        cur_map = mapping[doc_cui]
-        #        for id_ in cur_map['ids']:
-        #            pmc_mesh_edges.append({':START_ID': doc['pmid'], 
-        #                           ':TYPE': 'HAS_MESH', 
-        #                            ':END_ID':id_})
-        #    except KeyError:
-        #        continue
     entity_pmc_edges = aggregate_mentions(entity_pmc_edges)
     relations_edges = aggregate_relations(relations_edges)
     results = {'nodes': [{'type': 'Entity', 'values': entities_nodes}, {'type': 'Article', 'values': articles_nodes}],
@@ -308,31 +327,39 @@ def create_neo4j_csv(results):
     articles_nodes = None
     relations_edges = None
     entity_pmc_edges = None
+    other_nodes = []
+    other_edges = []
     for nodes in results['nodes']:
         if nodes['type'] == 'Entity':
             entities_nodes = nodes['values']
         elif nodes['type'] == 'Article':
             articles_nodes = nodes['values']
+        else:
+            other_nodes.extend(nodes['values'])
     for edges in results['edges']:
         if edges['type'] == 'relation':
             relations_edges = edges['values']
         elif edges['type'] == 'mention':
             entity_pmc_edges = edges['values']
+        elif edges['type'] == 'NEW':
+            other_edges.extend(edges['values'])
 
     dic_ = {
         'entities.csv': entities_nodes,
         'articles.csv': articles_nodes,
+        'other_nodes.csv': other_nodes,
         'entities_pmc.csv':entity_pmc_edges, 
         'relations.csv':relations_edges,
+        'other_edges.csv': other_edges
     }
 
     dic_fiels = {
         'entities.csv': ['cui:ID', 'label', 'sem_types:string[]'],
         'articles.csv': ['pmcid:ID', 'title', 'journal','sent_id:string[]'],
-        #'mesh.csv':['mesh_id:ID', 'label'],
+        'other_nodes.csv': ['id:ID'],
         'entities_pmc.csv':[':START_ID','score:float[]','sent_id:string[]', ':END_ID'], 
         'relations.csv':[':START_ID','subject_score:float[]','subject_sem_type:string[]',':TYPE','pred_type:string[]', 'object_score:float[]','object_sem_type:string[]','sent_id:string[]','negation:string[]',':END_ID'],
-        #'pmc_mesh.csv': [':START_ID',':TYPE', ':END_ID']
+        'other_edges.csv':[':START_ID', ':TYPE', ':END_ID']
     }
 
     for k, toCSV in dic_.iteritems():
@@ -361,25 +388,29 @@ def fix_on_create_nodes(node):
         - s: string,
         part of cypher query, responsible handling the creation of anew node
     """
-    s = 'ON CREATE SET'
-    for key, value in node.iteritems():
-        if 'ID' in key.split(':'):
-            continue
-        elif 'string[]' in key:
-            field = key.split(':')[0]
-            string_value = '['
-            for i in value.split(';'):
-                string_value += '"' + i + '"' + ','
-            string_value = string_value[:-1] + ']'
-            s += ' a.%s = %s,' % (field, string_value)
-        elif 'float[]' in key:
-            field = key.split(':')[0]
-            string_value = str([int(i) for i in value.split(';')])
-            s += ' a.%s = %s,' % (field, string_value)
-        else:
-            field = key.split(':')[0]
-            s += ' a.%s = "%s",' % (field, value.replace('"', "'"))
-    s = s[:-1]
+    s = ' '
+    # Has at least one other attribute to create than id
+    if len(node.keys())>1:
+        s = 'ON CREATE SET '
+        for key, value in node.iteritems():
+            if 'ID' in key.split(':'):
+                continue
+            elif 'string[]' in key:
+                field = key.split(':')[0]
+                string_value = '['
+                for i in value.split(';'):
+                    string_value += '"' + i + '"' + ','
+                string_value = string_value[:-1] + ']'
+                s += ' a.%s = %s,' % (field, string_value)
+            elif 'float[]' in key:
+                field = key.split(':')[0]
+                string_value = str([int(i) for i in value.split(';')])
+                s += ' a.%s = %s,' % (field, string_value)
+            else:
+                field = key.split(':')[0]
+                s += ' a.%s = "%s",' % (field, value.replace('"', "'"))
+        s = s[:-1]
+    # No attributes
     return s
 
 
@@ -425,6 +456,7 @@ def populate_nodes(graph, nodes, type_, id_):
     for ent in nodes:
         c += 1
         quer = create_merge_query(ent, type_, id_)
+        print quer
         f = graph.run(quer)
         total_rel += f.stats()['nodes_created']
         if c % 1000 == 0 and c > 999:
@@ -536,6 +568,49 @@ def populate_mentioned_edges(graph, entity_pmc_edges):
     time_log('Finally added %d new mentions!' % total_rel)
 
 
+def populate_new_edges(graph, new_edges):
+    """
+    Function to create/merge an unknwon type of edge.
+    Input:
+        - graph: py2neo.Graph,
+        object representing the graph in neo4j. Using py2neo.
+        - new_edges: list,
+        list of dics containing the attributes of each relation
+    Output: None, populates the db.
+    """
+
+    c = 0
+    total_rel = 0
+    # field containing the type of the node for the subject
+    sub_type = settings['load']['edges']['sub_type']
+    if sub_type == 'Entity':
+        sub_id = 'cui'
+    elif sub_type == 'Article':
+        sub_id = 'pmcid'
+    else:
+        sub_id = 'id'
+    # field containing the type of the node for the object
+    obj_type = settings['load']['edges']['obj_type']
+    if obj_type == 'Entity':
+        obj_id = 'cui'
+    elif sub_type == 'Article':
+        obj_id = 'pmcid'
+    else:
+        obj_id = 'id'
+    for edge in new_edges:
+        c += 1
+        quer = """
+        MATCH (a:%s {%s:"%s"}), (b:%s {%s:"%s"})
+        MERGE (a)-[r:%s]->(b)
+        """ % (sub_type, sub_id, edge[':START_ID'], obj_type, obj_id, edge[':END_ID'], edge[':TYPE'],)
+        f = graph.run(quer)
+        total_rel += f.stats()['relationships_created']
+        if c % 1000 == 0 and c > 999:
+            time_log("Process: %d -- %0.2f %%" % (c, 100*c/float(len(new_edges))))
+    time_log('#Edges: %d' % c)
+    time_log('Finally added %d new edges!' % total_rel)
+
+
 
 def update_neo4j(results):
     
@@ -566,7 +641,7 @@ def update_neo4j(results):
         elif nodes['type'] == 'Entity':
             id_ = 'cui'
         else:
-            id_ = None
+            id_ = 'id'
         if id_ is None:
             time_log('Specific node type not handled! You have to update the code!')
             raise NotImplementedError
@@ -578,6 +653,9 @@ def update_neo4j(results):
         elif edges['type'] == 'mention':
             time_log('~~~~~~  Will create Mentioned In edges ~~~~~~')
             populate_mentioned_edges(graph, edges['values'])
+        elif edges['type'] == 'NEW':
+            time_log('~~~~~~  Will create new-type of nodes edges ~~~~~~')
+            populate_new_edges(graph, edges['values'])
         else:
             time_log('Specific node type not handled! You have to update the code!')
             raise NotImplementedError 

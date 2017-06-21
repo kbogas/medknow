@@ -8,7 +8,7 @@
 
 from config import settings
 from utilities import time_log
-from data_loader import parse_medical_rec, parse_json, parse_edges, extract_semrep
+from data_loader import parse_medical_rec, parse_json, parse_edges, extract_semrep, get_concepts_from_edges
 from data_saver import save_csv, save_neo4j, save_json, create_neo4j_results, \
                         create_neo4j_csv, update_neo4j
 
@@ -79,6 +79,8 @@ class Extractor(object):
             # self.func = extract_metamap
         elif self.key == 'reverb':
             raise NotImplementedError
+        elif self.key == 'get_concepts_from_edges':
+            self.func = get_concepts_from_edges
             # self.func = extract_reverb
         if name:
             self.name = name
@@ -95,9 +97,9 @@ class Extractor(object):
             json_ = self.func(json, self.parser_key)
             time_log('Completed extracting using %s!' % self.name)
         else:
-            print 'Unsupported type of json to work on!'
-            print 'Task : %s  --- Type of json: %s' % (self.name, type(json))
-            print json
+            time_log('Unsupported type of json to work on!')
+            time_log('Task : %s  --- Type of json: %s' % (self.name, type(json)))
+            time_log(json)
             json_ = {}
         return json_
 
@@ -149,9 +151,9 @@ class Dumper(object):
             json_ = self.func(results)
             time_log('Completed saving data. Results saved in:\n %s' % settings['out'][self.key]['out_path'])
         else:
-            print 'Unsupported type of json to work on!'
-            print 'Task : %s  --- Type of json: %s' % (self.name, type(json))
-            print json
+            time_log('Unsupported type of json to work on!')
+            time_log('Task : %s  --- Type of json: %s' % (self.name, type(json)))
+            time_log(json)
             json_ = {}
         return json_
 
@@ -174,6 +176,7 @@ class taskCoordinator(object):
         for phase in self.phases:
             dic = self.pipeline[phase]
             if phase == 'in':
+                # inp_types = [i.strip(' ').lower() for i in self.pipeline[phase]['inp'].split(',') if i]
                 parser = Parser(self.pipeline[phase]['inp'])
                 json_ = parser.read()
             if phase == 'trans':
