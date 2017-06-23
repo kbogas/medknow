@@ -89,6 +89,43 @@ def stopw_removal(inp, stop):
     return final
 
 
+def create_text_batches(text, N=5000, buffer_ = 100):
+    """
+    Function that takes a long string and split it into
+    batches of approximately length N. The actual length
+    of each batch differs, as each batch end in the next
+    dot found in the string after the N chars.
+    Input:
+        - text: str,
+        piece of text to clean
+        - N: int,
+        split into strings of 5000 characters each
+    Output:
+        - chunks: list,
+        list containing the string parts
+    """
+    M = len(text)
+    chunks_num = M // N
+    if M % N != 0:
+        chunks_num += 1
+    chunks = []
+    end_ind = 0
+    start_ind = 0
+    i = 0
+    while i < chunks_num:
+        start_ind = end_ind
+        prob_text = text[start_ind + N: start_ind + N + buffer_]
+        if '.' in prob_text:
+            end_ind = start_ind + N + prob_text.index('.')+1
+        else:
+            end_ind = start_ind + N
+        chunks.append(text[start_ind:end_ind])
+        i += 1
+    chunks = [ch for ch in chunks if ch]
+    return chunks
+
+
+
 def reverb_wrapper(text, stop=None):
     """
     Function-wrapper for ReVerb binary. Extracts relations
@@ -323,7 +360,6 @@ def semrep_wrapper(text):
     cmd = "echo " + text + " | ./semrep.v1.7 -L 2015 -Z 2015AA -F"
     semrep_dir = settings['load']['path']['semrep']
     lines = runProcess(cmd, semrep_dir)
-    print lines
     # mapping of line elements to fields
     mappings = {
         "text": {
@@ -394,8 +430,10 @@ def clean_text(text):
         - text: str,
         the same text with cmd escaped parenthesis and removing '
     """
-
-    text = text.replace('(', '\(').replace(')', '\)').replace("'",  ' ')
+    unw_chars = [('(', '\('), (')', '\)'), ("'",  ' '), ('\n', " "), ('\t', ' '), (';', " ")]
+    for unw_pair in unw_chars:
+        text = text.replace(unw_pair[0], unw_pair[1])
+    text = ' '.join(text.split())
     return text
 
 
@@ -419,9 +457,20 @@ def extract_semrep(json_, key):
     # textfield to read text from
     textfield = settings['out'][key]['json_text_field']
     N = len(json_[docfield])
-    for i, doc in enumerate(json_[docfield]):
+    for i, doc in enumerate(json_[docfield][:1]):
         text = clean_text(doc[textfield])
-        results = semrep_wrapper(text)
+        if len(text) > 5000:
+            chunks = create_text_batches(text)
+            results = {'text': text, 'sents': []}
+            sent_id = 0
+            for chunk in chunks:
+                tmp = semrep_wrapper(chunk)
+                for sent in tmp['sents']:
+                    sent['sent_id'] = sent_id
+                    sent_id += 1
+                    results['sents'].append(sent)
+        else:
+            results = semrep_wrapper(text)
         json_[docfield][i].update(results)
         proc = int(i/float(N)*100)
         if proc % 10 == 0:
