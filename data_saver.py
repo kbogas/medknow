@@ -265,7 +265,7 @@ def create_neo4j_harvester(json_):
     for doc in json_[out_outfield]:
         pmid = doc[out_idfield]
         for sent in doc['sents']:
-            cur_sent_id = str(pmid)+'_' + sent_prefix + '_' +  sent['sent_id']
+            cur_sent_id = str(pmid)+'_' + str(sent_prefix) + '_' +  str(sent['sent_id'])
             unique_sent[cur_sent_id] = sent['sent_text']
             for ent in sent['entities']:
                 if ent['cuid']:

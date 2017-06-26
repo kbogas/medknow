@@ -457,7 +457,7 @@ def extract_semrep(json_, key):
     # textfield to read text from
     textfield = settings['out'][key]['json_text_field']
     N = len(json_[docfield])
-    for i, doc in enumerate(json_[docfield][:1]):
+    for i, doc in enumerate(json_[docfield]):
         text = clean_text(doc[textfield])
         if len(text) > 5000:
             chunks = create_text_batches(text)
@@ -473,7 +473,7 @@ def extract_semrep(json_, key):
             results = semrep_wrapper(text)
         json_[docfield][i].update(results)
         proc = int(i/float(N)*100)
-        if proc % 10 == 0:
+        if proc % 100 == 0:
             time_log('We are at %d/%d documents -- %0.2f %%' % (i, N, proc))
     return json_
 
@@ -507,7 +507,8 @@ def parse_medical_rec():
     # labelfield where title of the document is stored
     out_labelfield = settings['out']['json']['json_label_field']
     diag[out_labelfield] = ['Medical Record' + str(i) for i in diag.index.values.tolist()]
-    diag['journal'] = ['None' for i in diag.index.values.tolist()]
+    if not('journal' in diag.columns.tolist()):
+        diag['journal'] = ['None' for i in diag.index.values.tolist()]
     # Replace textfiled with out_textfield
     diag[out_textfield] = diag[textfield]
     del diag[textfield]
@@ -557,6 +558,8 @@ def parse_json():
             article[out_labelfield] = article.pop(labelfield)
         else:
             article[out_labelfield] = ' '
+        if not('journal' in article.keys()):
+            article['journal'] = 'None'
     json_[out_outfield] = json_.pop(outfield)
     return json_
 
@@ -612,7 +615,7 @@ def get_concepts_from_edges(json_, key):
     new_relations = []
     # Cache used to avoid retrieving the same concepts
     cache = {}
-    for ii, triple in enumerate(json_[outfield][:10]):
+    for ii, triple in enumerate(json_[outfield]):
         try:
             if sub_source == 'UMLS':
                 if not(triple['s'] in cache):
