@@ -10,7 +10,7 @@ from config import settings
 from utilities import time_log
 from data_loader import parse_medical_rec, parse_json, parse_edges, extract_semrep, get_concepts_from_edges
 from data_saver import save_csv, save_neo4j, save_json, create_neo4j_results, \
-                        create_neo4j_csv, update_neo4j
+                        create_neo4j_csv, update_neo4j, update_mongo
 
 
 class Parser(object):
@@ -133,6 +133,9 @@ class Dumper(object):
         elif self.key == 'neo4j':
             self.transform = create_neo4j_results
             self.func = update_neo4j
+        elif self.key == 'mongo':
+            self.transform = None
+            self.func = update_mongo
         if inp_key == 'med_rec' or inp_key == 'json':
             self.type_ = 'harvester'
         elif inp_key == 'edges':

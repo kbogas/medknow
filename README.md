@@ -6,7 +6,7 @@ This project has been designed with modularity in mind, allowing the implementat
 Currently, the main features of this project are(some under work):
 * Different kind of input sources: free text, already extracted relations, concepts etc.
 * A variety of knowledge extractors working in a pipeline: **SemRep**, **MetaMap**, **Reverb**
-* Multiple persistency options: saving enriched documents to file, entities and relations to .csv, utilizing **Neo4j** 
+* Multiple persistency options: saving enriched documents to file, entities and relations to .csv, utilizing **Neo4j**. Also, using **Mongodb** for sentence fetching.
 
 ## Getting Started
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
@@ -16,7 +16,10 @@ This project is based around concept and relation extractions from text [SemRep]
 **Note**: You will have to also install **MetaMap** for SemRep to work.
 
 ### Neo4j
-If you'd like to persist results in Neo4j you will have to pre-install in on your local machine. More details available on their [website](https://neo4j.com/).
+If you'd like to persist results in Neo4j you will have to pre-install it on your local machine. More details available on their [website](https://neo4j.com/).
+
+### MongoDB
+If you'd like to keep track of the sentences as found in each document/article, in order to retrieve them later you will have to pre-install MongoDB on your local machine. More details available on their [website](https://www.mongodb.com/).
 
 ### Python Modules
 This is pretty straightforward, the needed modules are located in *requirements.txt*. You can, either install them individually or better yet use [pip](https://pip.pypa.io/en/stable/) to install them in a bundle, by executing:
@@ -30,13 +33,14 @@ after cloning/downloading the project folder.
 The functionalities offered by this module are wrapped in a **Pipeline**, broken down into three phases. These are:
 1. *Input*: What type of input do we expect to deal with? Where to read it from? Specific fields in .csv or .json files that we must take into account etc.
 2. *Transformations*: What type of transformations to do the input provided? Enrich the input document with concepts and relations using SemRep? MetaMap + Reverb? Transform an edge-list between already existing entities into the correct structure for populating the Neo4j db? 
-3. *Output*: What to do with the results? Save enriched file in .json? Output .csv files for use by the neo4j import-tool? Directly create/update the Neo4j db?
+3. *Output*: What to do with the results? Save enriched file in .json? Output .csv files for use by the neo4j import-tool? Directly create/update the Neo4j db? Also, save sentences processed in MongoDB for later usage?
 
 All of these choices are parameterized in **settings.yaml**, following the .yaml structure. The outline of the available parameters is the following:
 - **pipeline**: Mainly *True/False* values for specific keys regarding the previously presented phases, denoting what functions to be completed.
-- **input**: Variables regarding the paths of SemRep, input files, as well as, key fields in .json and .csv files where text and other information is stored
-- **API Keys**: API keys used for specific services.
-- **Neo4j**: Details regarding the connection to an existing Neo4j instance
+- **load**: Variables regarding the paths of SemRep, input files, as well as, key fields in .json and .csv files where text and other information is stored
+- **apis**: API keys used for specific services.
+- **neo4j**: Details regarding the connection to an existing Neo4j instance
+- **mongo**: Details regarding the connection to a mongodb collection(If it does not exist in will be created)
 - **Output**: Variables and paths regarding the generated results.
 
 Details on each variable are found in the settings.yaml. An overview of the available keys-values is presented here:
@@ -89,6 +93,11 @@ Details on each variable are found in the settings.yaml. An overview of the avai
   - **user**: Username (e.g. neo4j).*
   - **password**: Password (e.g. admin).*
  
+**mongo**: Variables for connection to an existing and running mongodb. If **mongo** is False in the pipeline the following don't matter. Also, if the wanted db-collection is not existing, it will be created.
+  - **uri**: Full uri needed to connect to the db (e.g. mongodb://user:pass@localhost:27017).*
+  - **db**: Name of the database.* 
+  - **collection**: Name of the collection.*
+  - 
 **out**: Which of the following sections will be used is related to whether the corresponding key in the pipeline 'out' field has a True value. If not, they don't matter.
 - *json*:
     - **out_path**: path where the generated json will be saved.* 
@@ -101,6 +110,8 @@ Details on each variable are found in the settings.yaml. An overview of the avai
     - **out_path**: path where the nodes and edges .csvs will be saved.* 
 - neo4j:
     - **out_path**: This is just for printing purposes that the save will be perfomed in 'out_path'. Change the variables in the **neo4j** section if you want to configure access to neo4j, not this! (e.g. localhost:7474)*
+- mongo:
+    - **out_path**: This is just for printing purposes that the save will be perfomed in 'out_path'. Change the variables in the **mongo** section if you want to configure access to mongodb, not this! (e.g. localhost:27017)*
 
 The fields ending with *, can take up any value if they are not needed in the corresponding task. The pipeline denotes which tasks to do and correspondiglym which sections of the .yaml to access.
 

@@ -17,6 +17,7 @@ import unicodecsv as csv2
 import pandas as pd
 import py2neo
 import logging
+import pymongo
 from config import settings
 from utilities import time_log
 
@@ -635,3 +636,52 @@ def update_neo4j(results):
             time_log('Specific node type not handled! You have to update the code!')
             raise NotImplementedError 
 
+
+def update_mongo(json_):
+    """
+    Helper function to save the sentences found in the enriched articles in
+    mongodb. Connecting to a collection according to settings and then
+    creating/updating the articles with the sentences found in them.
+    Input:
+        - json_: dic,
+        json-style dictionary generated from the semrep extractor in the
+        previous phase. Must make sure that there is a field named as indicated
+        in json_['out']['json']['json_doc_field'], where the documents/articles
+        are stored and each document/article has a field sents, as expected
+        in the output of the semrep extractor.
+    Output:
+        None, just populates the database
+
+    """
+    uri = settings['mongo']['uri']
+    db_name = settings['mongo']['db']
+    collection_name = settings['mongo']['collection']
+    client = pymongo.MongoClient(uri)
+    db = client[db_name]
+    collection = db[collection_name]
+    new = 0
+    upd = 0
+    docs = json_[settings['out']['json']['json_doc_field']]
+    for i, doc in enumerate(docs):
+        cursor = collection.find({'id': doc['id']})
+        sents = [{'sent_id': sent['sent_id'], 'text': sent['sent_text']} for sent in doc['sents']]
+        if cursor.count() == 0:
+            collection.insert_one({'id': doc['id'], 'sentences': sents})
+            new += 1
+        else:
+            for mongo_doc in cursor:
+                cur_sent = mongo_doc['sentences']
+                cur_ids = [s['sent_id'] for s in cur_sent]
+                new_sent = [s for s in sents if not(s['sent_id'] in cur_ids)]
+                if new_sent:
+                    cur_sent.extend(new_sent)
+                    mongo_doc['sentences'] = cur_sent
+                    collection.replace_one({'id': doc['id']}, mongo_doc)
+                    upd += 1
+        if i % 100 == 0 and i > 99:
+            time_log("Process: %d -- %0.2f %%" % (i, 100*i/float(len(docs))))
+    time_log('Finally updated %d -- inserted %d documents!' % (upd, new))
+
+
+
+        
