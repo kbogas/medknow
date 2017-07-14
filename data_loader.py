@@ -473,7 +473,7 @@ def extract_semrep(json_, key):
             results = semrep_wrapper(text)
         json_[docfield][i].update(results)
         proc = int(i/float(N)*100)
-        if proc % 100 == 0:
+        if proc % 10 == 0 and proc > 0:
             time_log('We are at %d/%d documents -- %0.2f %%' % (i, N, proc))
     return json_
 
@@ -552,6 +552,8 @@ def parse_json():
     # labelfield where title of the document is stored
     out_labelfield = settings['out']['json']['json_label_field']
     for article in json_[outfield]:
+        if not(textfield in article.keys()):
+            continue
         article[out_textfield] = article.pop(textfield)
         article['id'] = article.pop(idfield)
         if labelfield != 'None':

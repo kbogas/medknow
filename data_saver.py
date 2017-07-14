@@ -394,22 +394,23 @@ def fix_on_create_nodes(node):
     if len(node.keys())>1:
         s = 'ON CREATE SET '
         for key, value in node.iteritems():
-            if 'ID' in key.split(':'):
-                continue
-            elif 'string[]' in key:
-                field = key.split(':')[0]
-                string_value = '['
-                for i in value.split(';'):
-                    string_value += '"' + i + '"' + ','
-                string_value = string_value[:-1] + ']'
-                s += ' a.%s = %s,' % (field, string_value)
-            elif 'float[]' in key:
-                field = key.split(':')[0]
-                string_value = str([int(i) for i in value.split(';')])
-                s += ' a.%s = %s,' % (field, string_value)
-            else:
-                field = key.split(':')[0]
-                s += ' a.%s = "%s",' % (field, value.replace('"', "'"))
+            if (value) and (value != " "):
+                if 'ID' in key.split(':'):
+                    continue
+                elif 'string[]' in key:
+                    field = key.split(':')[0]
+                    string_value = '['
+                    for i in value.split(';'):
+                        string_value += '"' + i + '"' + ','
+                    string_value = string_value[:-1] + ']'
+                    s += ' a.%s = %s,' % (field, string_value)
+                elif 'float[]' in key:
+                    field = key.split(':')[0]
+                    string_value = str([int(i) for i in value.split(';')])
+                    s += ' a.%s = %s,' % (field, string_value)
+                else:
+                    field = key.split(':')[0]
+                    s += ' a.%s = "%s",' % (field, value.replace('"', "'"))
         s = s[:-1]
     # No attributes
     return s

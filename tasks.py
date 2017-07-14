@@ -188,7 +188,7 @@ class taskCoordinator(object):
                         extractor = Extractor(key, parser.key)
                         json_ = extractor.run(json_)
             if phase == 'out':
-                for key, value in dic.iteritems():
+                for key, value in sorted(dic.iteritems()):
                     if value:
                         dumper = Dumper(key, parser.key)
                         dumper.save(json_)
