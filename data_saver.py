@@ -41,6 +41,36 @@ def save_json(json_):
     with open(outfile, 'w+') as f:
         json.dump(json_, f, indent=3)
 
+def save_json2(json_):
+    """
+    Helper function to save enriched medical json to file
+.    Input:
+        - json_: dic,
+        json-style dictionary generated from the extractors in the
+        previous phase
+    """
+
+    # Output file location from settings
+    outfile = settings['out']['json']['out_path']
+    if os.path.isfile(outfile):
+        with open(outfile, 'r+') as f:
+            docs1 = json.load(f)[settings['out']['json']['json_doc_field']]
+            json_[settings['out']['json']['json_doc_field']] = json_[settings['out']['json']['json_doc_field']] + docs1
+            json.dump(json_, f, indent=3)
+    else:
+        with open(outfile, 'w+') as f:
+            json.dump(json_, f, indent=3)
+
+    # with open (outfile, mode="r+") as file:
+    #     file.seek(0,2)
+    #     position = file.tell() -1
+    #     file.seek(position)
+    #     file.write( ",{}]".format(json.dumps(dictionary)) )
+    
+    # with open(outfile, 'a+') as f:
+    #     json1 = json.load(f)
+        
+
 
 
 def save_csv(json_):

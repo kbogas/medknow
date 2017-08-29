@@ -8,9 +8,10 @@
 
 from config import settings
 from utilities import time_log
-from data_loader import parse_medical_rec, parse_json, parse_edges, extract_semrep, get_concepts_from_edges
-from data_saver import save_csv, save_neo4j, save_json, create_neo4j_results, \
+from data_loader import parse_medical_rec, parse_json, parse_edges, extract_semrep, extract_metamap, get_concepts_from_edges
+from data_saver import save_csv, save_neo4j, save_json, save_json2, create_neo4j_results, \
                         create_neo4j_csv, update_neo4j, update_mongo
+from tqdm import tqdm
 
 
 class Parser(object):
@@ -75,7 +76,7 @@ class Extractor(object):
         if self.key == 'semrep':
             self.func = extract_semrep
         elif self.key == 'metamap':
-            raise NotImplementedError
+            self.func = extract_metamap
             # self.func = extract_metamap
         elif self.key == 'reverb':
             raise NotImplementedError
@@ -127,6 +128,7 @@ class Dumper(object):
         if self.key == 'json':
             self.transform = None
             self.func = save_json
+            #self.func = save_json2
         elif self.key == 'csv':
             self.transform = create_neo4j_results
             self.func = create_neo4j_csv
@@ -192,6 +194,27 @@ class taskCoordinator(object):
                     if value:
                         dumper = Dumper(key, parser.key)
                         dumper.save(json_)
+
+    def run2(self):
+        parser = Parser(self.pipeline['in']['inp'])
+        out_outfield = settings['out']['json']['json_doc_field']
+        json_ = parser.read()
+        for doc in tqdm(json_[out_outfield]):
+            tmp = {out_outfield:[doc]}
+            for phase in self.phases:
+                dic = self.pipeline[phase]
+                if phase == 'in':
+                    pass
+                if phase == 'trans':
+                    for key, value in dic.iteritems():
+                        if value:
+                            extractor = Extractor(key, parser.key)
+                            tmp = extractor.run(tmp)
+                if phase == 'out':
+                    for key, value in sorted(dic.iteritems()):
+                        if value:
+                            dumper = Dumper(key, parser.key)
+                            dumper.save(tmp)
 
     def print_pipeline(self):
         print('#'*30 + ' Pipeline Schedule' + '#'*30)

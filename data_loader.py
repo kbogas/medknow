@@ -13,17 +13,18 @@ import csv
 import subprocess
 import urllib2
 import requests
+import sys
 import unicodecsv as csv2
 import pandas as pd
+import numpy as np
 from nltk.tokenize import sent_tokenize
 from config import settings
+from pymetamap import MetaMap
 from utilities import time_log, get_concept_from_cui, get_concept_from_source
 from itertools import product
 
 
-
-
-def mmap_extract(text):
+def metamap_wrapper(text):
     """
     Function-wrapper for metamap binary. Extracts concepts
     found in text.
@@ -35,19 +36,33 @@ def mmap_extract(text):
         - text: str,
         a piece of text or sentence
     Output:
-        - concepts: list,
-        list of metamap concepts extracted
+       - a dictionary with key sents and values
+       a list of the concepts found
     """
 
     # Tokenize into sentences
     sents = sent_tokenize(text)
+    # Load Metamap Instance
     mm = MetaMap.get_instance(settings['load']['path']['metamap'])
-    concepts, errors = mm.extract_concepts(sents, range(len(sents)), 
-                                         word_sense_disambiguation=True)
+    concepts, errors = mm.extract_concepts(sents, range(len(sents)))
+    # Keep the sentence ids
+    ids = np.array([int(concept[0]) for concept in concepts])
+    sentences = []
+    for i in xrange(len(sents)):
+        tmp = {'sent_id': i+1, 'entities': [], 'relations': []}
+        # Wanted concepts according to sentence
+        wanted = np.where(ids == i)[0].tolist()
+        for w_ind in wanted:
+            w_conc = concepts[w_ind]
+            if hasattr(w_conc, 'cui'):
+                tmp_conc = {'label': w_conc.preferred_name, 'cui': w_conc.cui, 
+                            'sem_types': w_conc.semtypes, 'score': w_conc.score}
+                tmp['entities'].append(tmp_conc)
+        sentences.append(tmp)
     if errors:
         time_log('Errors with extracting concepts!')
         time_log(errors)
-    return concepts
+    return {'sents': sentences, 'sent_text':text}
 
 
 def runProcess(exe, working_dir):    
@@ -314,6 +329,46 @@ def extract_entities(text, json_={}):
         json_['entities'][sent['sent_id']] = ents
     return json_
 
+def extract_metamap(json_, key):
+    """
+    Task function to parse and extract concepts from json_ style dic, using
+    the MetaMap binary.
+    Input:
+        - json_ : dic,
+        json-style dictionary generated from the Parse object related
+        to the specific type of input
+        - key : str,
+        string denoting the type of medical text to read from. Used to
+        find the correct paragraph in the settings.yaml file.
+    Output:
+        - json_ : dic,
+        the previous json-style dictionary enriched with medical concepts
+    """
+    # outerfield for the documents in json
+    docfield = settings['out'][key]['json_doc_field']
+    # textfield to read text from
+    textfield = settings['out'][key]['json_text_field']
+    N = len(json_[docfield])
+    for i, doc in enumerate(json_[docfield]):
+        text = clean_text(doc[textfield])
+        if len(text) > 5000:
+            chunks = create_text_batches(text)
+            results = {'text': text, 'sents': []}
+            sent_id = 0
+            for chunk in chunks:
+                tmp = metamap_wrapper(chunk)
+                for sent in tmp['sents']:
+                    sent['sent_id'] = sent_id
+                    sent_id += 1
+                    results['sents'].append(sent)
+        else:
+            results = metamap_wrapper(text)
+        json_[docfield][i].update(results)
+        proc = int(i/float(N)*100)
+        if proc % 10 == 0 and proc > 0:
+            time_log('We are at %d/%d documents -- %0.2f %%' % (i, N, proc))
+    return json_
+
 
 def enrich_with_triples(results, subject, pred='MENTIONED_IN'):
     """
@@ -357,6 +412,8 @@ def semrep_wrapper(text):
         mappings dictionary. 
     """
     # Exec the binary
+    # ???This is a temporary fix for the encoding problems???
+    text = repr(text)
     cmd = "echo " + text + " | ./semrep.v1.7 -L 2015 -Z 2015AA -F"
     semrep_dir = settings['load']['path']['semrep']
     lines = runProcess(cmd, semrep_dir)
@@ -458,6 +515,7 @@ def extract_semrep(json_, key):
     textfield = settings['out'][key]['json_text_field']
     N = len(json_[docfield])
     for i, doc in enumerate(json_[docfield]):
+        print doc['id']
         text = clean_text(doc[textfield])
         if len(text) > 5000:
             chunks = create_text_batches(text)
@@ -563,6 +621,9 @@ def parse_json():
         if not('journal' in article.keys()):
             article['journal'] = 'None'
     json_[out_outfield] = json_.pop(outfield)
+    # N = len(json_[out_outfield])
+    # json_[out_outfield] = json_[out_outfield][(2*N/5):(3*N/5)]
+    json_[out_outfield] = json_[out_outfield][:]
     return json_
 
 
