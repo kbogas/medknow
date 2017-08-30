@@ -449,6 +449,11 @@ def semrep_wrapper(text):
     for line in lines:
         # If Sentence
         if line.startswith('SE'):
+            # Temporary workaround to remove read tab-delimited semrep output
+            # Wihtout mixing up tabs contained in the text
+            line = line.replace('\|', '!@#$')
+            elements = line.split('|')
+            elements = [el.replace('!@#$', '\|') for el in elements]
             elements = line.split('|')
             # New sentence that was processed
             if elements[5] == 'text':
@@ -487,7 +492,7 @@ def clean_text(text):
         - text: str,
         the same text with cmd escaped parenthesis and removing '
     """
-    unw_chars = [('(', '\('), (')', '\)'), ("'",  ' '), ('\n', " "), ('\t', ' '), (';', " ")]
+    unw_chars = [('(', '\('), (')', '\)'), ("'",  ' '), ('\n', " "), ('\t', ' '), (';', " "), ("}", "\}"), ("{", "\{"), ("|", "\|")]
     for unw_pair in unw_chars:
         text = text.replace(unw_pair[0], unw_pair[1])
     text = ' '.join(text.split())
