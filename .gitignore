@@ -8,10 +8,10 @@ __pycache__/
 *.so
 
 # Jupyter Notebook
-.ipynb_checkpoints
+*.ipynb_checkpoints
 
 # pyenv
-.python-version
+.*python-version
 
 # Specific files
 settings.yaml

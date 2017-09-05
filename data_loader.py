@@ -414,6 +414,7 @@ def semrep_wrapper(text):
     # Exec the binary
     # ???This is a temporary fix for the encoding problems???
     text = repr(text)
+    #text = text
     cmd = "echo " + text + " | ./semrep.v1.7 -L 2015 -Z 2015AA -F"
     semrep_dir = settings['load']['path']['semrep']
     lines = runProcess(cmd, semrep_dir)
@@ -449,12 +450,11 @@ def semrep_wrapper(text):
     for line in lines:
         # If Sentence
         if line.startswith('SE'):
-            # Temporary workaround to remove read tab-delimited semrep output
+            # Temporary workaround to remove read |-delimited semrep output
             # Wihtout mixing up tabs contained in the text
             line = line.replace('\|', '!@#$')
             elements = line.split('|')
             elements = [el.replace('!@#$', '\|') for el in elements]
-            elements = line.split('|')
             # New sentence that was processed
             if elements[5] == 'text':
                 tmp = {"entities": [], "relations": []}
@@ -492,8 +492,8 @@ def clean_text(text):
         - text: str,
         the same text with cmd escaped parenthesis and removing '
     """
-    unw_chars = [('(', '\('), (')', '\)'), ("'",  ' '), ('\n', " "), ('\t', ' '), (';', " "), ("}", "\}"), ("{", "\{"), ("|", "\|")]
-    for unw_pair in unw_chars:
+    replace_chars = [('(', ' '), (')', ' '), ("'",  ' '), ('\n', " "), ('\t', ' '), (';', " "), ("}", " "), ("{", " "), ("|", " "), ("&", " ")]
+    for unw_pair in replace_chars:
         text = text.replace(unw_pair[0], unw_pair[1])
     text = ' '.join(text.split())
     return text
@@ -614,6 +614,7 @@ def parse_json():
     out_textfield = settings['out']['json']['json_text_field']
     # labelfield where title of the document is stored
     out_labelfield = settings['out']['json']['json_label_field']
+    json_[outfield] = [art for art in json_[outfield] if textfield in art.keys()]
     for article in json_[outfield]:
         if not(textfield in article.keys()):
             continue

@@ -512,6 +512,7 @@ def populate_relation_edges(graph, relations_edges):
         WHERE "%s" in r.sent_id
         Return r;
         """ % (edge[':START_ID'], edge[':END_ID'], edge[':TYPE'], edge['sent_id:string[]'].split(';')[0])
+        print quer
         f = graph.run(quer)
         if len(f.data()) == 0:
             subj_s = '['
@@ -545,6 +546,8 @@ def populate_relation_edges(graph, relations_edges):
                  sent_s, neg_s, str([int(i) for i in edge['subject_score:float[]'].split(';')]), subj_s, 
                    str([int(i) for i in edge['object_score:float[]'].split(';')]), obj_s,
                  sent_s, neg_s)
+            print quer
+            print '~'*50
             f = graph.run(quer)
             total_rel += f.stats()['relationships_created']
         if c % 1000 == 0 and c > 999:
