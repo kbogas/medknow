@@ -683,8 +683,14 @@ def get_concepts_from_edges(json_, key):
     obj_source = settings['load'][key]['obj_source']
     new_relations = []
     # Cache used to avoid retrieving the same concepts
-    cache = {}
+    try:
+        with open(settings['cache_path'], 'r') as f:
+            cache = json.load(f)
+    except IOError:
+        cache = {}
+    N = len(json_[outfield])
     for ii, triple in enumerate(json_[outfield]):
+        print triple
         try:
             if sub_source == 'UMLS':
                 if not(triple['s'] in cache):
@@ -763,7 +769,12 @@ def get_concepts_from_edges(json_, key):
         except Exception, e:
             time_log('S: %s | P: %s | O: %s' % (triple['s'],triple['p'],triple['o']))
             time_log('Skipped the above edge! Probably due to concept-fetching errors!')
-        if ii % 1000 == 0 and ii > 999:
-            time_log("Edges Transformation Process: %d -- %0.2f %%" % (ii, 100*ii/float(len(json_[outfield]))))
+        proc = int(ii/float(N)*100)
+        if proc % 10 == 0 and proc > 0:
+            time_log('We are at %d/%d edges transformed -- %0.2f %%' % (ii, N, proc))
+        # if ii % 100 == 0 and ii > 9:
+        #     time_log("Edges Transformation Process: %d -- %0.2f %%" % (ii, 100*ii/float(len(json_[outfield]))))
     json_[outfield] = new_relations
+    with open(settings['cache_path'], 'w+') as f:
+        json.dump(cache, f, indent=2)
     return json_

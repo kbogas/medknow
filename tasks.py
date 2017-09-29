@@ -196,25 +196,61 @@ class taskCoordinator(object):
                         dumper.save(json_)
 
     def run2(self):
+        stream_flag = self.pipeline['in']['stream']
         parser = Parser(self.pipeline['in']['inp'])
-        out_outfield = settings['out']['json']['json_doc_field']
-        json_ = parser.read()
-        for doc in tqdm(json_[out_outfield]):
-            tmp = {out_outfield:[doc]}
+        outfield = settings['out']['json']['json_doc_field']
+        json_all = parser.read()
+        if stream_flag:
+            for item in json_all[outfield]:
+                json_ = {outfield:[item]}
+                for phase in self.phases:
+                    dic = self.pipeline[phase]
+                    if phase == 'trans':
+                        for key, value in dic.iteritems():
+                            if value:
+                                extractor = Extractor(key, parser.key)
+                                json_ = extractor.run(json_)
+                    if phase == 'out':
+                        for key, value in sorted(dic.iteritems()):
+                            if value:
+                                dumper = Dumper(key, parser.key)
+                                dumper.save(json_)
+
+        else:
+            json_ = json_all
             for phase in self.phases:
                 dic = self.pipeline[phase]
-                if phase == 'in':
-                    pass
                 if phase == 'trans':
                     for key, value in dic.iteritems():
                         if value:
                             extractor = Extractor(key, parser.key)
-                            tmp = extractor.run(tmp)
+                            json_ = extractor.run(json_)
                 if phase == 'out':
                     for key, value in sorted(dic.iteritems()):
                         if value:
                             dumper = Dumper(key, parser.key)
-                            dumper.save(tmp)
+                            dumper.save(json_)
+
+
+        # parser = Parser(self.pipeline['in']['inp'])
+        # out_outfield = settings['out']['json']['json_doc_field']
+        # json_ = parser.read()
+        # for doc in tqdm(json_[out_outfield]):
+        #     tmp = {out_outfield:[doc]}
+        #     for phase in self.phases:
+        #         dic = self.pipeline[phase]
+        #         if phase == 'in':
+        #             pass
+        #         if phase == 'trans':
+        #             for key, value in dic.iteritems():
+        #                 if value:
+        #                     extractor = Extractor(key, parser.key)
+        #                     tmp = extractor.run(tmp)
+        #         if phase == 'out':
+        #             for key, value in sorted(dic.iteritems()):
+        #                 if value:
+        #                     dumper = Dumper(key, parser.key)
+        #                     dumper.save(tmp)
 
     def print_pipeline(self):
         print('#'*30 + ' Pipeline Schedule' + '#'*30)

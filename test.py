@@ -15,5 +15,6 @@ logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(message)s')
 
 TaskManager = taskCoordinator()
 TaskManager.print_pipeline()
-TaskManager.run()
+#TaskManager.run()
+TaskManager.run2()
 exit(1)

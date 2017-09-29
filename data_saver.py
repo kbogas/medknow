@@ -27,7 +27,7 @@ suppress_log_to_file = py2neo.watch('neo4j',
 suppress_log_to_file2 = py2neo.watch('httpstream',
                                     level='ERROR', out='./out/neo4j.log')
 
-def save_json(json_):
+def save_json2(json_):
     """
     Helper function to save enriched medical json to file.
     Input:
@@ -41,7 +41,7 @@ def save_json(json_):
     with open(outfile, 'w+') as f:
         json.dump(json_, f, indent=3)
 
-def save_json2(json_):
+def save_json(json_):
     """
     Helper function to save enriched medical json to file
 .    Input:
@@ -53,13 +53,11 @@ def save_json2(json_):
     # Output file location from settings
     outfile = settings['out']['json']['out_path']
     if os.path.isfile(outfile):
-        with open(outfile, 'r+') as f:
+        with open(outfile, 'r') as f:
             docs1 = json.load(f)[settings['out']['json']['json_doc_field']]
-            json_[settings['out']['json']['json_doc_field']] = json_[settings['out']['json']['json_doc_field']] + docs1
-            json.dump(json_, f, indent=3)
-    else:
-        with open(outfile, 'w+') as f:
-            json.dump(json_, f, indent=3)
+        json_[settings['out']['json']['json_doc_field']] = json_[settings['out']['json']['json_doc_field']] + docs1
+    with open(outfile, 'w+') as f:
+        json.dump(json_, f, indent=3)
 
     # with open (outfile, mode="r+") as file:
     #     file.seek(0,2)
