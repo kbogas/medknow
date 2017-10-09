@@ -298,9 +298,7 @@ def create_neo4j_harvester(json_):
             unique_sent[cur_sent_id] = sent['sent_text']
             for ent in sent['entities']:
                 if ent['cuid']:
-                    if ent['cuid'] in unique_cuis:
-                        continue
-                    else:
+                    if not(ent['cuid'] in unique_cuis):
                         unique_cuis.append(ent['cuid'])
                         if (type(ent['sem_types']) == list and len(ent['sem_types']) > 1):
                             sem_types = ';'.join(ent['sem_types'])

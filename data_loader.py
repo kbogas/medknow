@@ -772,9 +772,9 @@ def get_concepts_from_edges(json_, key):
         proc = int(ii/float(N)*100)
         if proc % 10 == 0 and proc > 0:
             time_log('We are at %d/%d edges transformed -- %0.2f %%' % (ii, N, proc))
+        with open(settings['cache_path'], 'w+') as f:
+            json.dump(cache, f, indent=2)
         # if ii % 100 == 0 and ii > 9:
         #     time_log("Edges Transformation Process: %d -- %0.2f %%" % (ii, 100*ii/float(len(json_[outfield]))))
     json_[outfield] = new_relations
-    with open(settings['cache_path'], 'w+') as f:
-        json.dump(cache, f, indent=2)
     return json_

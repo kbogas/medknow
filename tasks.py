@@ -196,7 +196,7 @@ class taskCoordinator(object):
                         dumper.save(json_)
 
     def run2(self):
-        stream_flag = self.pipeline['in']['stream']
+        stream_flag = self.pipeline['in']['stream'] == 'True'
         parser = Parser(self.pipeline['in']['inp'])
         outfield = settings['out']['json']['json_doc_field']
         json_all = parser.read()
