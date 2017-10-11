@@ -119,6 +119,7 @@ def aggregate_mentions(entity_pmc_edges):
         if cur_key in uniques:
             uniques[cur_key]['score:float[]'] = uniques[cur_key]['score:float[]']+';'+edge['score:float[]']
             uniques[cur_key]['sent_id:string[]'] = uniques[cur_key]['sent_id:string[]']+';'+edge['sent_id:string[]']
+            uniques[cur_key]['resource:string[]'] = uniques[cur_key]['resource:string[]']+';'+edge['resource:string[]']
             flag = True
         else:
             uniques[cur_key] = edge
@@ -147,11 +148,13 @@ def aggregate_relations(relations_edges):
         cur_key = str(edge[':START_ID'])+'_'+str(edge[':TYPE'])+'_'+str(edge[':END_ID'])
         flag = False
         if cur_key in uniques:
-            if not(edge['sent_id:string[]'] in uniques[cur_key]['sent_id:string[]']):
-                for field in edge.keys():
-                    if not(field in [':START_ID', ':TYPE', ':END_ID']):
-                        uniques[cur_key][field] = uniques[cur_key][field]+';'+edge[field]
-                flag = True
+            if 'sent_id:string[]' in edge.keys():
+                if edge['sent_id:string[]'] in uniques[cur_key]['sent_id:string[]']:
+                    continue
+            for field in edge.keys():
+                if not(field in [':START_ID', ':TYPE', ':END_ID']):
+                    uniques[cur_key][field] = uniques[cur_key][field]+';'+edge[field]
+            flag = True
         else:
             uniques[cur_key] = edge
         if flag:
@@ -244,7 +247,7 @@ def create_neo4j_edges(json_):
                 other_nodes_obj.append(edge['o'])
         #sub_id_key = next((key for key in edge['s'].keys() if ':ID' in key), None)
         #obj_id_key = next((key for key in edge['o'].keys() if ':ID' in key), None)
-        results['edges'][0]['values'].append({':START_ID':edge['s']['id:ID'], ':TYPE':edge['p'], ':END_ID':edge['o']['id:ID']})
+        results['edges'][0]['values'].append({':START_ID':edge['s']['id:ID'], ':TYPE':edge['p'], 'resource:string[]':settings['neo4j']['resource'], ':END_ID':edge['o']['id:ID']})
     if entities_nodes:
         results['nodes'].append({'type': 'Entity', 'values': entities_nodes})
     if articles_nodes:
@@ -313,6 +316,8 @@ def create_neo4j_harvester(json_):
                     entity_pmc_edges.append({':START_ID': ent['cuid'],
                                              'score:float[]': ent['score'],
                                              'sent_id:string[]': cur_sent_id,
+                                             ':TYPE':'MENTIONED_IN',
+                                             'resource:string[]':settings['neo4j']['resource'],
                                              ':END_ID': pmid})
             for rel in sent['relations']:
                 if rel['subject__cui'] and rel['object__cui']:
@@ -325,6 +330,7 @@ def create_neo4j_harvester(json_):
                                      'object_sem_type:string[]': rel['object__sem_type'],
                                      'sent_id:string[]': cur_sent_id,
                                      'negation:string[]': rel['negation'],
+                                     'resource:string[]':settings['neo4j']['resource'],
                                      ':END_ID': rel['object__cui']})            
         articles_nodes.append({'id:ID': doc[out_idfield], 
                                'title': doc[out_labelfield], 
@@ -384,9 +390,10 @@ def create_neo4j_csv(results):
         'entities.csv': ['id:ID', 'label', 'sem_types:string[]'],
         'articles.csv': ['id:ID', 'title', 'journal','sent_id:string[]'],
         'other_nodes.csv': ['id:ID'],
-        'entities_pmc.csv':[':START_ID','score:float[]','sent_id:string[]', ':END_ID'], 
-        'relations.csv':[':START_ID','subject_score:float[]','subject_sem_type:string[]',':TYPE','pred_type:string[]', 'object_score:float[]','object_sem_type:string[]','sent_id:string[]','negation:string[]',':END_ID'],
-        'other_edges.csv':[':START_ID', ':TYPE', ':END_ID']
+        'entities_pmc.csv':[':START_ID','score:float[]','sent_id:string[]', 'resource:string[]', ':END_ID'], 
+        'relations.csv':[':START_ID','subject_score:float[]','subject_sem_type:string[]',':TYPE','pred_type:string[]', 
+        'object_score:float[]','object_sem_type:string[]','sent_id:string[]','negation:string[]', 'resource:string[]', ':END_ID'],
+        'other_edges.csv':[':START_ID', ':TYPE', 'resource:string[]', ':END_ID']
     }
 
     for k, toCSV in dic_.iteritems():
@@ -488,6 +495,72 @@ def populate_nodes(graph, nodes, type_):
     time_log('Finally added %d new nodes!' % total_rel) 
 
 
+def create_edge_query(edge, sub_ent=settings['load']['edges']['sub_type'], 
+                       obj_ent=settings['load']['edges']['obj_type']):
+    """
+    Takes as input an edge, in the form of a dictionary, and returns the
+    corresponding cypher query that:
+    1) First Matches the start-end nodes and the type of the edge
+    2) Merges the edge the following way:
+        - If the edge doesn't exist it creates it setting all attributes
+          of the edge according to its' values
+        - If the edge exists, it updates the attributes that are both in the
+          graph edge and the dictionary and creates the attributes that are not
+          found in the graph edge but are provided in the edge dictionary
+    Input:
+        - edge, dict
+        dictionary containing the edge properties
+        - sub_ent, str
+        string denoting what type is the subject node
+        - obj_ent, str
+        string denoting what type is the object node
+    Output:
+        - s, string
+        query string to perform
+    """
+    s = """MATCH (a:%s {id:"%s"}), (b:%s {id:"%s"}) 
+           MERGE (a)-[r:%s]->(b)
+           ON MATCH SET """ % (sub_ent, edge[':START_ID'], obj_ent, edge[':END_ID'],  edge[':TYPE'])
+    for key, value in edge.iteritems():
+        if (value):
+            if not(('START_ID' in key.split(':')) or ('END_ID' in key.split(':')) or ('TYPE' in key.split(':'))):
+                if 'string[]' in key:
+                    field = key.split(':')[0]
+                    string_value = '['
+                    for i in value.split(';'):
+                        string_value += '"' + i + '"' + ','
+                    string_value = string_value[:-1] + ']'
+                elif 'float[]' in key:
+                    field = key.split(':')[0]
+                    string_value = str([int(i) for i in value.split(';')])
+                else:
+                    field = key.split(':')[0]
+                    string_value = value.replace('"', "'")
+                s += ' r.%s = CASE WHEN NOT EXISTS(r.%s) THEN %s ELSE r.%s + %s END,' % (field, field, string_value, field, string_value)
+    s = s[:-1]
+    s += ' ON CREATE SET '
+    for key, value in edge.iteritems():
+        if (value):
+            if not(('START_ID' in key.split(':')) or ('END_ID' in key.split(':')) or ('TYPE' in key.split(':'))):
+                if 'string[]' in key:
+                    field = key.split(':')[0]
+                    string_value = '['
+                    for i in value.split(';'):
+                        string_value += '"' + i + '"' + ','
+                    string_value = string_value[:-1] + ']'
+                elif 'float[]' in key:
+                    field = key.split(':')[0]
+                    string_value = str([int(i) for i in value.split(';')])
+                else:
+                    field = key.split(':')[0]
+                    string_value = value.replace('"', "'")
+                s += ' r.%s = %s,' % (field, string_value)
+    s = s[:-1]
+    return s
+
+
+
+
 def populate_relation_edges(graph, relations_edges):
     """
     Function to create/merge the relation edges between existing entities.
@@ -501,49 +574,60 @@ def populate_relation_edges(graph, relations_edges):
     c = 0
     total_rel = 0
     for edge in relations_edges:
-        c +=1  
+        c += 1  
         quer = """
         Match (a:Entity {id:"%s"}), (b:Entity {id:"%s"})
         MATCH (a)-[r:%s]->(b)
         WHERE "%s" in r.sent_id
         Return r;
         """ % (edge[':START_ID'], edge[':END_ID'], edge[':TYPE'], edge['sent_id:string[]'].split(';')[0])
-        print quer
         f = graph.run(quer)
         if len(f.data()) == 0:
-            subj_s = '['
-            for i in edge['subject_sem_type:string[]'].split(';'):
-                subj_s += '"' + i + '"' + ','
-            subj_s = subj_s[:-1] + ']'
-            obj_s = '['
-            for i in edge['object_sem_type:string[]'].split(';'):
-                obj_s += '"' + i + '"' + ','
-            obj_s = obj_s[:-1] + ']'
-            sent_s = '['
-            for i in edge['sent_id:string[]'].split(';'):
-                sent_s += '"' + i + '"' + ','
-            sent_s = sent_s[:-1] + ']'
-            neg_s = '['
-            for i in edge['negation:string[]'].split(';'):
-                neg_s += '"' + i + '"' + ','
-            neg_s = neg_s[:-1] + ']'
-            quer = """
-            Match (a:Entity {id:"%s"}), (b:Entity {id:"%s"})
-            MERGE (a)-[r:%s]->(b)
-            ON MATCH SET r.subject_score = r.subject_score + %s, r.subject_sem_type = r.subject_sem_type + %s,
-            r.object_score = r.object_score + %s, r.object_sem_type = r.object_sem_type + %s,
-            r.sent_id = r.sent_id + %s, r.negation = r.negation + %s
-            ON CREATE SET r.subject_score = %s, r.subject_sem_type =  %s,
-            r.object_score =  %s, r.object_sem_type =  %s,
-            r.sent_id =  %s, r.negation =  %s
-            """ % (edge[':START_ID'], edge[':END_ID'], edge[':TYPE'], 
-                   str([int(i) for i in edge['subject_score:float[]'].split(';')]), subj_s, 
-                   str([int(i) for i in edge['object_score:float[]'].split(';')]), obj_s,
-                 sent_s, neg_s, str([int(i) for i in edge['subject_score:float[]'].split(';')]), subj_s, 
-                   str([int(i) for i in edge['object_score:float[]'].split(';')]), obj_s,
-                 sent_s, neg_s)
-            print quer
-            print '~'*50
+            quer = create_edge_query(edge, 'Entity', 'Entity')
+            # subj_s = '['
+            # for i in edge['subject_sem_type:string[]'].split(';'):
+            #     subj_s += '"' + i + '"' + ','
+            # subj_s = subj_s[:-1] + ']'
+            # obj_s = '['
+            # for i in edge['object_sem_type:string[]'].split(';'):
+            #     obj_s += '"' + i + '"' + ','
+            # obj_s = obj_s[:-1] + ']'
+            # sent_s = '['
+            # for i in edge['sent_id:string[]'].split(';'):
+            #     sent_s += '"' + i + '"' + ','
+            # sent_s = sent_s[:-1] + ']'
+            # neg_s = '['
+            # for i in edge['negation:string[]'].split(';'):
+            #     neg_s += '"' + i + '"' + ','
+            # neg_s = neg_s[:-1] + ']'
+            # sent_res = '['
+            # for i in edge['resource:string[]'].split(';'):
+            #     sent_res += '"' + i + '"' + ','
+            # sent_res = sent_res[:-1] + ']'
+            # quer = """
+            # Match (a:Entity {id:"%s"}), (b:Entity {id:"%s"})
+            # MERGE (a)-[r:%s]->(b)
+            # ON MATCH SET r.subject_score = r.subject_score + %s, r.subject_sem_type = r.subject_sem_type + %s,
+            # r.object_score = r.object_score + %s, r.object_sem_type = r.object_sem_type + %s,
+            # r.sent_id = r.sent_id + %s, r.negation = r.negation + %s, r.resource = r.resource + %s
+            # ON CREATE SET r.subject_score = %s, r.subject_sem_type =  %s,
+            # r.object_score =  %s, r.object_sem_type =  %s,
+            # r.sent_id =  %s, r.negation =  %s, r.resource = %s
+            # """ % (edge[':START_ID'], edge[':END_ID'], edge[':TYPE'], 
+            #        str([int(i) for i in edge['subject_score:float[]'].split(';')]), subj_s, 
+            #        str([int(i) for i in edge['object_score:float[]'].split(';')]), obj_s,
+            #      sent_s, neg_s, sent_res, str([int(i) for i in edge['subject_score:float[]'].split(';')]), subj_s, 
+            #        str([int(i) for i in edge['object_score:float[]'].split(';')]), obj_s,
+            #      sent_s, neg_s, sent_res)
+            # print quer
+            # print '~'*50
+            # print edge
+            # quer = """
+            # Match (a:Entity {id:"%s"}), (b:Entity {id:"%s"})
+            # MERGE (a)-[r:%s]->(b)
+            # ON MATCH SET r.object_score = CASE WHEN NOT EXISTS(r.object_score) THEN %s ELSE r.object_score + %s END
+            # """ % (edge[':START_ID'], edge[':END_ID'], edge[':TYPE'], 
+            #        str([int(i) for i in edge['object_score:float[]'].split(';')]), str([int(i) for i in edge['object_score:float[]'].split(';')]))
             f = graph.run(quer)
             total_rel += f.stats()['relationships_created']
         if c % 1000 == 0 and c > 999:
@@ -568,24 +652,29 @@ def populate_mentioned_edges(graph, entity_pmc_edges):
         c += 1
         quer = """
         Match (a:Entity {id:"%s"}), (b:Article {id:"%s"})
-        MATCH (a)-[r:MENTIONED_IN]->(b)
+        MATCH (a)-[r:%s]->(b)
         WHERE "%s" in r.sent_id
         Return r;
-        """ % (edge[':START_ID'], edge[':END_ID'],  edge['sent_id:string[]'])
+        """ % (edge[':START_ID'], edge[':END_ID'], edge[':TYPE'] , edge['sent_id:string[]'])
         f = graph.run(quer)
         if len(f.data()) == 0:
-            sent_s = '['
-            for i in edge['sent_id:string[]'].split(';'):
-                sent_s += '"' + i + '"' + ','
-            sent_s = sent_s[:-1] + ']'
-            quer = """
-            Match (a:Entity {id:"%s"}), (b:Article {id:"%s"})
-            MERGE (a)-[r:MENTIONED_IN]->(b)
-            ON MATCH SET r.score = r.score + %s, r.sent_id = r.sent_id + %s
-            ON CREATE SET r.score = %s, r.sent_id = %s
-            """ % (edge[':START_ID'], edge[':END_ID'], 
-                   str([int(i) for i in edge['score:float[]'].split(';')]), sent_s,
-                   str([int(i) for i in edge['score:float[]'].split(';')]), sent_s)
+            quer = create_edge_query(edge, 'Entity', 'Article')
+            # sent_s = '['
+            # for i in edge['sent_id:string[]'].split(';'):
+            #     sent_s += '"' + i + '"' + ','
+            # sent_s = sent_s[:-1] + ']'
+            # sent_res = '['
+            # for i in edge['resource:string[]'].split(';'):
+            #     sent_res += '"' + i + '"' + ','
+            # sent_res = sent_res[:-1] + ']'
+            # quer = """
+            # Match (a:Entity {id:"%s"}), (b:Article {id:"%s"})
+            # MERGE (a)-[r:MENTIONED_IN]->(b)
+            # ON MATCH SET r.score = r.score + %s, r.sent_id = r.sent_id + %s, r.resource = r.resource + %s
+            # ON CREATE SET r.score = %s, r.sent_id = %s, r.resource = %s
+            # """ % (edge[':START_ID'], edge[':END_ID'], 
+            #        str([int(i) for i in edge['score:float[]'].split(';')]), sent_s, sent_res,
+            #        str([int(i) for i in edge['score:float[]'].split(';')]), sent_s, sent_res)
             f = graph.run(quer)
             total_rel += f.stats()['relationships_created']
         if c % 1000 == 0 and c>999:
@@ -611,15 +700,31 @@ def populate_new_edges(graph, new_edges):
     sub_type = settings['load']['edges']['sub_type']
     # field containing the type of the node for the object
     obj_type = settings['load']['edges']['obj_type']
-
     for edge in new_edges:
-        c += 1
+        c += 1  
         quer = """
-        MATCH (a:%s {id:"%s"}), (b:%s {id:"%s"})
-        MERGE (a)-[r:%s]->(b)
-        """ % (sub_type, edge[':START_ID'], obj_type, edge[':END_ID'], edge[':TYPE'],)
+        Match (a:%s {id:"%s"}), (b:%s {id:"%s"})
+        MATCH (a)-[r:%s]->(b)
+        WHERE ("%s" in r.resource)
+        Return r;
+        """ % (sub_type, edge[':START_ID'], obj_type, edge[':END_ID'], edge[':TYPE'], settings['neo4j']['resource'])
         f = graph.run(quer)
-        total_rel += f.stats()['relationships_created']
+        if len(f.data()) == 0:
+            quer = create_edge_query(edge, sub_type, obj_type)
+            # sent_res = '['
+            # for i in edge['resource:string[]'].split(';'):
+            #     sent_res += '"' + i + '"' + ','
+            # sent_res = sent_res[:-1] + ']'
+            # quer = """
+            # MATCH (a:%s {id:"%s"}), (b:%s {id:"%s"})
+            # MERGE (a)-[r:%s]->(b)
+            # ON MATCH SET r.resource = r.resource + %s
+            # ON CREATE SET r.resource = %s
+            # """ % (sub_type, edge[':START_ID'], obj_type, edge[':END_ID'], 
+            #        edge[':TYPE'], sent_res, sent_res)
+            # print quer
+            f = graph.run(quer)
+            total_rel += f.stats()['relationships_created']
         if c % 1000 == 0 and c > 999:
             time_log("Process: %d -- %0.2f %%" % (c, 100*c/float(len(new_edges))))
     time_log('#Edges: %d' % c)
@@ -649,7 +754,6 @@ def update_neo4j(results):
         #time_log(e)
         #time_log("Couldn't connect to db! Check settings!")
         exit(2)
-    graph_new = py2neo.Graph()
     for nodes in results['nodes']:
         populate_nodes(graph, nodes['values'], nodes['type'])
     for edges in results['edges']:

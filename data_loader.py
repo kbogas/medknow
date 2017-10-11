@@ -649,6 +649,41 @@ def parse_edges():
     return json_
 
 
+def parse_remove_edges():
+    """
+    Dummy function to conform with the pipeline when
+    we just want to delete edges instead of inserting
+    them.
+    Output:
+        - an empty dic to be passed around, as to 
+        conform to the pipeline schema 
+    """
+
+    # Read neo4j essentials before 
+    host = settings['neo4j']['host']
+    port = settings['neo4j']['port']
+    user = settings['neo4j']['user']
+    password = settings['neo4j']['password']
+    try:
+        graph = py2neo.Graph(host=host, port=port, user=user, password=password)
+    except Exception, e:
+        #time_log(e)
+        #time_log("Couldn't connect to db! Check settings!")
+        exit(2)
+    quer1 = """ MATCH ()-[r]->() WHERE r.resource = "%s" DELETE r;""" % (settings['neo4j']['resource'])
+    f = graph.run(quer1)
+    rem = f.stats()['relationships_deleted']
+    quer2 = """ MATCH ()-[r]->() WHERE "%s" in  r.resource SET 
+    r.resource = FILTER(x IN r.resource WHERE x <> "%s");""" % (settings['neo4j']['resource'], settings['neo4j']['resource'])
+    f = graph.run(quer2)
+    alt = f.stats()['properties_set']
+    time_log('Removed %d edges that were found only in %s' % (rem, settings['neo4j']['resource']))
+    time_log("Altered %s edges' resource attribute associated with %s" % (alt, settings['neo4j']['resource']))
+    exit(1)
+    return {}
+
+
+
 def get_concepts_from_edges(json_, key):
     """
     Get concept-specific info related to an entity from a list

@@ -8,7 +8,8 @@
 
 from config import settings
 from utilities import time_log
-from data_loader import parse_medical_rec, parse_json, parse_edges, extract_semrep, extract_metamap, get_concepts_from_edges
+from data_loader import parse_medical_rec, parse_json, parse_edges, parse_remove_edges, \
+                        extract_semrep, extract_metamap, get_concepts_from_edges
 from data_saver import save_csv, save_neo4j, save_json, save_json2, create_neo4j_results, \
                         create_neo4j_csv, update_neo4j, update_mongo
 from tqdm import tqdm
@@ -35,6 +36,8 @@ class Parser(object):
             self.func = parse_json
         elif self.key == 'edges':
             self.func = parse_edges
+        elif self.key == 'delete':
+            self.func = parse_remove_edges
         if name:
             self.name = name
         else:
@@ -257,6 +260,9 @@ class taskCoordinator(object):
         for phase in self.phases:
             dic = self.pipeline[phase]
             if phase == 'in':
+                if dic['inp'] == 'delete':
+                    print("Will delete all %s resource associated edges!" % settings['neo4j']['resource'])
+                    break
                 print('Will read from: %s' % settings['load'][dic['inp']]['inp_path'])
             if phase == 'trans':
                 print('Will use the following transformation utilities:')
