@@ -14,6 +14,7 @@ import subprocess
 import urllib2
 import requests
 import sys
+import pymongo
 import unicodecsv as csv2
 import pandas as pd
 import numpy as np
@@ -22,6 +23,7 @@ from config import settings
 from pymetamap import MetaMap
 from utilities import time_log, get_concept_from_cui, get_concept_from_source
 from itertools import product
+from multiprocessing import cpu_count, Pool
 
 
 def metamap_wrapper(text):
@@ -515,6 +517,8 @@ def extract_semrep(json_, key):
         the previous json-style dictionary enriched with medical concepts
     """
     # outerfield for the documents in json
+    if key == 'mongo':
+        key = 'json'
     docfield = settings['out'][key]['json_doc_field']
     # textfield to read text from
     textfield = settings['out'][key]['json_text_field']
@@ -539,6 +543,95 @@ def extract_semrep(json_, key):
         if proc % 10 == 0 and proc > 0:
             time_log('We are at %d/%d documents -- %0.2f %%' % (i, N, proc))
     return json_
+
+
+
+
+def extract_semrep_parallel(json_, key):
+    """
+    Task function to parse and extract concepts from json_ style dic, using
+    the SemRep binary. It uses multiprocessing for efficiency.
+    Input:
+        - json_ : dic,
+        json-style dictionary generated from the Parse object related
+        to the specific type of input
+        - key : str,
+        string denoting the type of medical text to read from. Used to
+        find the correct paragraph in the settings.yaml file.
+    Output:
+        - json_ : dic,
+        the previous json-style dictionary enriched with medical concepts
+    """
+    # outerfield for the documents in json
+    docfield = settings['out'][key]['json_doc_field']
+    N = len(json_[docfield])
+    N_THREADS = cpu_count() - 2
+    batches = chunk_document_collection(json_[docfield], N_THREADS)
+    len_col = " | ".join([str(len(b)) for b in batches])
+    time_log('Will break the collection into batches of: %s documents!' % len_col)
+    batches = [{docfield: batch} for batch in batches]
+    data = zip(batches, [key for batch in batches])
+    pool = Pool(N_THREADS, maxtasksperchild=1)
+    res = pool.map(semrep_parallel_worker, data)
+    pool.close()
+    pool.join()
+    del pool
+    tmp = {docfield: []}
+    for batch_res in res:
+        tmp[docfield].extend(batch_res[docfield])
+    for i, sub_doc in enumerate(json_[docfield]):
+        for sub_doc_new in tmp[docfield]:
+            if sub_doc_new['id'] == sub_doc['id']:
+                json_[docfield][i].update(sub_doc_new)
+                break
+    time_log('Completed multiprocessing extraction!')
+    return json_
+
+
+def chunk_document_collection(seq, num):
+    """
+    Helper function to break a collection of N = len(seq) documents
+    to num batches.
+    Input:
+        - seq: list,
+        a list of documents
+        - num: int,
+        number of batches to be broken into. This will usually be
+        equal to the number of cores available
+    Output:
+        - out: list,
+        a list of lists. Each sublist contains the batch-collection
+        of documents to be used.
+    """
+    avg = len(seq) / float(num)
+    out = []
+    last = 0.0
+
+    while last < len(seq):
+        out.append(seq[int(last):int(last + avg)])
+        last += avg
+
+    return out
+
+
+def semrep_parallel_worker((json_, key)):
+    """
+    Just a worker interface for the different SemRep
+    executions.
+    Input:
+        - json_ : dic,
+        json-style dictionary generated from the Parse object related
+        to the specific type of input
+        - key : str,
+        string denoting the type of medical text to read from. Used to
+        find the correct paragraph in the settings.yaml file.
+    Output:
+        - res : dic,
+        the previous json-style dictionary enriched with medical concepts
+
+    """
+    res = extract_semrep(json_, key)
+    return res
 
 
 def parse_medical_rec():
@@ -580,7 +673,6 @@ def parse_medical_rec():
     del diag[idfield]
     json_ = {docfield: diag.to_dict(orient='records')}
     return json_
-
 
 def parse_json():
     """
@@ -629,7 +721,7 @@ def parse_json():
     json_[out_outfield] = json_.pop(outfield)
     # N = len(json_[out_outfield])
     # json_[out_outfield] = json_[out_outfield][(2*N/5):(3*N/5)]
-    json_[out_outfield] = json_[out_outfield][:]
+    json_[out_outfield] = json_[out_outfield][:8]
     return json_
 
 
@@ -646,6 +738,54 @@ def parse_edges():
     inp_path = settings['load']['edges']['inp_path']
     with open(inp_path, 'r') as f:
         json_ = json.load(f, encoding='utf-8')
+    return json_
+
+
+def parse_mongo():
+    """
+    Parse collection from mongo
+    Output:
+        - json_ : dic,
+        json-style dictionary with a field containing
+        documents
+    """
+
+    # input file path from settings.yaml
+    uri = settings['load']['mongo']['uri']
+    db_name = settings['load']['mongo']['db']
+    collection_name = settings['load']['mongo']['collection']
+    client = pymongo.MongoClient(uri)
+    db = client[db_name]
+    collection = db[collection_name]
+    # docfield containing list of elements
+    out_outfield = settings['out']['json']['json_doc_field']
+    json_ = {out_outfield: []}
+    cur = collection.find({})
+    for item in cur:
+        del item['_id']
+        json_[out_outfield].append(item)
+    # textfield to read text from
+    textfield = settings['load']['json']['textfield']
+    # idfield where id of document is stored
+    idfield = settings['load']['json']['idfield']
+    # labelfield where title of the document is stored
+    labelfield = settings['load']['json']['labelfield']
+    # textfield to read text from
+    out_textfield = settings['out']['json']['json_text_field']
+    # labelfield where title of the document is stored
+    out_labelfield = settings['out']['json']['json_label_field']
+    json_[out_outfield] = [art for art in json_[out_outfield] if textfield in art.keys()]
+    for article in json_[out_outfield]:
+        if not(textfield in article.keys()):
+            continue
+        article[out_textfield] = article.pop(textfield)
+        article['id'] = article.pop(idfield)
+        if labelfield != 'None':
+            article[out_labelfield] = article.pop(labelfield)
+        else:
+            article[out_labelfield] = ' '
+        if not('journal' in article.keys()):
+            article['journal'] = 'None'
     return json_
 
 

@@ -52,10 +52,11 @@ def save_json(json_):
 
     # Output file location from settings
     outfile = settings['out']['json']['out_path']
-    if os.path.isfile(outfile):
-        with open(outfile, 'r') as f:
-            docs1 = json.load(f)[settings['out']['json']['json_doc_field']]
-        json_[settings['out']['json']['json_doc_field']] = json_[settings['out']['json']['json_doc_field']] + docs1
+    if settings['pipeline']['in']['stream']:
+        if os.path.isfile(outfile):
+            with open(outfile, 'r') as f:
+                docs1 = json.load(f)[settings['out']['json']['json_doc_field']]
+            json_[settings['out']['json']['json_doc_field']] = json_[settings['out']['json']['json_doc_field']] + docs1
     with open(outfile, 'w+') as f:
         json.dump(json_, f, indent=3)
 

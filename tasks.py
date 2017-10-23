@@ -9,7 +9,8 @@
 from config import settings
 from utilities import time_log
 from data_loader import parse_medical_rec, parse_json, parse_edges, parse_remove_edges, \
-                        extract_semrep, extract_metamap, get_concepts_from_edges
+                        extract_semrep, extract_semrep_parallel, extract_metamap, get_concepts_from_edges, \
+                        parse_mongo
 from data_saver import save_csv, save_neo4j, save_json, save_json2, create_neo4j_results, \
                         create_neo4j_csv, update_neo4j, update_mongo
 from tqdm import tqdm
@@ -32,6 +33,8 @@ class Parser(object):
         self.key = key
         if self.key == 'med_rec':
             self.func = parse_medical_rec
+        if self.key == 'mongo':
+            self.func = parse_mongo
         elif self.key == 'json':
             self.func = parse_json
         elif self.key == 'edges':
@@ -77,7 +80,11 @@ class Extractor(object):
         self.key = key
         self.parser_key = parser_key
         if self.key == 'semrep':
-            self.func = extract_semrep
+            if settings['pipeline']['in']['parallel']:
+                self.func = extract_semrep_parallel
+                time_log('Will use multiprocessing for the semrep extraction!')
+            else:
+                self.func = extract_semrep
         elif self.key == 'metamap':
             self.func = extract_metamap
             # self.func = extract_metamap
@@ -199,13 +206,32 @@ class taskCoordinator(object):
                         dumper.save(json_)
 
     def run2(self):
-        stream_flag = self.pipeline['in']['stream'] == 'True'
-        parser = Parser(self.pipeline['in']['inp'])
-        outfield = settings['out']['json']['json_doc_field']
-        json_all = parser.read()
-        if stream_flag:
-            for item in json_all[outfield]:
-                json_ = {outfield:[item]}
+        parallel_flag = str(self.pipeline['in']['parallel']) == 'True'
+        if parallel_flag:
+            pass
+        else:
+            stream_flag = str(self.pipeline['in']['stream']) == 'True'
+            parser = Parser(self.pipeline['in']['inp'])
+            outfield = settings['out']['json']['json_doc_field']
+            json_all = parser.read()
+            if stream_flag:
+                for item in json_all[outfield]:
+                    json_ = {outfield:[item]}
+                    for phase in self.phases:
+                        dic = self.pipeline[phase]
+                        if phase == 'trans':
+                            for key, value in dic.iteritems():
+                                if value:
+                                    extractor = Extractor(key, parser.key)
+                                    json_ = extractor.run(json_)
+                        if phase == 'out':
+                            for key, value in sorted(dic.iteritems()):
+                                if value:
+                                    dumper = Dumper(key, parser.key)
+                                    dumper.save(json_)
+
+            else:
+                json_ = json_all
                 for phase in self.phases:
                     dic = self.pipeline[phase]
                     if phase == 'trans':
@@ -218,21 +244,6 @@ class taskCoordinator(object):
                             if value:
                                 dumper = Dumper(key, parser.key)
                                 dumper.save(json_)
-
-        else:
-            json_ = json_all
-            for phase in self.phases:
-                dic = self.pipeline[phase]
-                if phase == 'trans':
-                    for key, value in dic.iteritems():
-                        if value:
-                            extractor = Extractor(key, parser.key)
-                            json_ = extractor.run(json_)
-                if phase == 'out':
-                    for key, value in sorted(dic.iteritems()):
-                        if value:
-                            dumper = Dumper(key, parser.key)
-                            dumper.save(json_)
 
 
         # parser = Parser(self.pipeline['in']['inp'])

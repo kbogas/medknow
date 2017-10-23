@@ -88,6 +88,8 @@ def get_concept_from_source(source_id, source, apikey=None):
     params = {'string': source_id, 'sabs': source, 'searchType': 'exact',
               'inputType': 'sourceUi', 'ticket': ticket}
     url = "https://uts-ws.nlm.nih.gov/rest/search/current"
+    print url
+    print params
     r = requests.get(url, params=params)
     r.encoding = 'utf-8'
     concepts = []
