@@ -773,7 +773,7 @@ def update_neo4j(results):
             raise NotImplementedError 
 
 
-def update_mongo(json_):
+def update_mongo_sentences(json_):
     """
     Helper function to save the sentences found in the enriched articles in
     mongodb. Connecting to a collection according to settings and then
@@ -789,9 +789,9 @@ def update_mongo(json_):
         None, just populates the database
 
     """
-    uri = settings['mongo']['uri']
-    db_name = settings['mongo']['db']
-    collection_name = settings['mongo']['collection']
+    uri = settings['mongo_sentences']['uri']
+    db_name = settings['mongo_sentences']['db']
+    collection_name = settings['mongo_sentences']['collection']
     client = pymongo.MongoClient(uri)
     db = client[db_name]
     collection = db[collection_name]
@@ -817,6 +817,40 @@ def update_mongo(json_):
         if i % 100 == 0 and i > 99:
             time_log("Process: %d -- %0.2f %%" % (i, 100*i/float(len(docs))))
     time_log('Finally updated %d -- inserted %d documents!' % (upd, new))
+
+
+
+def save_mongo(json_):
+    """
+    Helper function to save the sentences found in the enriched articles in
+    mongodb. Connecting to a collection according to settings and then
+    creating/updating the articles with the sentences found in them.
+    Input:
+        - json_: dic,
+        json-style dictionary generated from the semrep extractor in the
+        previous phase. Must make sure that there is a field named as indicated
+        in json_['out']['json']['json_doc_field'], where the documents/articles
+        are stored and each document/article has a field sents, as expected
+        in the output of the semrep extractor.
+    Output:
+        None, just populates the database
+
+    """
+    uri = settings['out']['mongo']['uri']
+    db_name = settings['out']['mongo']['db']
+    collection_name = settings['out']['mongo']['collection']
+    client = pymongo.MongoClient(uri)
+    db = client[db_name]
+    collection = db[collection_name]
+    # Output Idfield
+    idfield = settings['out']['json']['json_id_field']
+    docs = json_[settings['out']['json']['json_doc_field']]
+    for i, doc in enumerate(docs):
+        result = collection.replace_one({'id': str(doc[idfield])}, doc, True)
+        print result.__dict__
+        if i % 100 == 0 and i > 99:
+            time_log("Process: %d -- %0.2f %%" % (i, 100*i/float(len(docs))))
+
 
 
 

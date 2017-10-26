@@ -843,7 +843,6 @@ def parse_mongo():
             article[out_labelfield] = ' '
         if not('journal' in article.keys()):
             article['journal'] = 'None'
-    print json_.keys()
     return json_
 
 

@@ -12,7 +12,7 @@ from data_loader import parse_medical_rec, parse_json, parse_edges, parse_remove
                         extract_semrep, extract_semrep_parallel, extract_metamap, get_concepts_from_edges, \
                         parse_mongo, parse_mongo_parallel
 from data_saver import save_csv, save_neo4j, save_json, save_json2, create_neo4j_results, \
-                        create_neo4j_csv, update_neo4j, update_mongo
+                        create_neo4j_csv, update_neo4j, update_mongo_sentences, save_mongo
 from tqdm import tqdm
 import ijson.backends.yajl2_cffi as ijson2
 
@@ -157,9 +157,12 @@ class Dumper(object):
         elif self.key == 'neo4j':
             self.transform = create_neo4j_results
             self.func = update_neo4j
-        elif self.key == 'mongo':
+        elif self.key == 'mongo_sentences':
             self.transform = None
             self.func = update_mongo
+        elif self.key == 'mongo':
+            self.transform = None
+            self.func = save_mongo
         if inp_key == 'med_rec' or inp_key == 'json':
             self.type_ = 'harvester'
         elif inp_key == 'edges':
@@ -303,7 +306,9 @@ class taskCoordinator(object):
             #                         dumper.save(json_)
 
             else:
-                json_ = json_all
+                parser = Parser(self.pipeline['in']['inp'])
+                outfield = settings['out']['json']['json_doc_field']
+                json_ = parser.read()
                 for phase in self.phases:
                     dic = self.pipeline[phase]
                     if phase == 'trans':
