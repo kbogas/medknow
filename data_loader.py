@@ -563,9 +563,10 @@ def extract_semrep_parallel(json_, key):
         the previous json-style dictionary enriched with medical concepts
     """
     # outerfield for the documents in json
-    docfield = settings['out'][key]['json_doc_field']
+    if key == 'mongo':
+        docfield = settings['out']['json']['json_doc_field']
     N = len(json_[docfield])
-    N_THREADS = cpu_count() - 2
+    N_THREADS = cpu_count()
     batches = chunk_document_collection(json_[docfield], N_THREADS)
     len_col = " | ".join([str(len(b)) for b in batches])
     time_log('Will break the collection into batches of: %s documents!' % len_col)
@@ -721,7 +722,7 @@ def parse_json():
     json_[out_outfield] = json_.pop(outfield)
     # N = len(json_[out_outfield])
     # json_[out_outfield] = json_[out_outfield][(2*N/5):(3*N/5)]
-    json_[out_outfield] = json_[out_outfield][:8]
+    json_[out_outfield] = json_[out_outfield][:6]
     return json_
 
 
@@ -739,6 +740,62 @@ def parse_edges():
     with open(inp_path, 'r') as f:
         json_ = json.load(f, encoding='utf-8')
     return json_
+
+def parse_mongo_parallel(ind_= 0):
+    """
+    Parse collection from mongo to be processed in parallel fashion.
+    Fetches step = (N X numb_cores) of documents starting from ind_ and
+    delivers it to the rest of the pipeline
+    Output:
+        - json_ : dic,
+        json-style dictionary with a field containing
+        documents
+    """
+    # input file path from settings.yaml
+    uri = settings['load']['mongo']['uri']
+    db_name = settings['load']['mongo']['db']
+    collection_name = settings['load']['mongo']['collection']
+    client = pymongo.MongoClient(uri)
+    db = client[db_name]
+    collection = db[collection_name]
+    # docfield containing list of elements
+    out_outfield = settings['out']['json']['json_doc_field']
+    json_ = {out_outfield: []}
+    N_THREADS = cpu_count()
+    # batch size
+    step = N_THREADS * 100
+    if step > collection.count():
+        step = collection.count()
+    if ind_ >= collection.count():
+        return None, None, collection.count()
+    else:
+        cur = collection.find({}, skip=ind_, limit=step)
+        for item in cur:
+            del item['_id']
+            json_[out_outfield].append(item)
+        #textfield to read text from
+        textfield = settings['load']['json']['textfield']
+        # idfield where id of document is stored
+        idfield = settings['load']['json']['idfield']
+        # labelfield where title of the document is stored
+        labelfield = settings['load']['json']['labelfield']
+        # textfield to read text from
+        out_textfield = settings['out']['json']['json_text_field']
+        # labelfield where title of the document is stored
+        out_labelfield = settings['out']['json']['json_label_field']
+        json_[out_outfield] = [art for art in json_[out_outfield] if textfield in art.keys()]
+        for article in json_[out_outfield]:
+            if not(textfield in article.keys()):
+                continue
+            article[out_textfield] = article.pop(textfield)
+            article['id'] = article.pop(idfield)
+            if labelfield != 'None':
+                article[out_labelfield] = article.pop(labelfield)
+            else:
+                article[out_labelfield] = ' '
+            if not('journal' in article.keys()):
+                article['journal'] = 'None'
+        return json_, ind_ + step, collection.count()
 
 
 def parse_mongo():
@@ -786,6 +843,7 @@ def parse_mongo():
             article[out_labelfield] = ' '
         if not('journal' in article.keys()):
             article['journal'] = 'None'
+    print json_.keys()
     return json_
 
 

@@ -10,10 +10,11 @@ from config import settings
 from utilities import time_log
 from data_loader import parse_medical_rec, parse_json, parse_edges, parse_remove_edges, \
                         extract_semrep, extract_semrep_parallel, extract_metamap, get_concepts_from_edges, \
-                        parse_mongo
+                        parse_mongo, parse_mongo_parallel
 from data_saver import save_csv, save_neo4j, save_json, save_json2, create_neo4j_results, \
                         create_neo4j_csv, update_neo4j, update_mongo
 from tqdm import tqdm
+import ijson.backends.yajl2_cffi as ijson2
 
 
 class Parser(object):
@@ -34,7 +35,12 @@ class Parser(object):
         if self.key == 'med_rec':
             self.func = parse_medical_rec
         if self.key == 'mongo':
-            self.func = parse_mongo
+            parallel_flag = str(settings['pipeline']['in']['parallel']) == 'True'
+            stream_flag = str(settings['pipeline']['in']['parallel']) == 'True'
+            if parallel_flag or stream_flag:
+                self.func = parse_mongo_parallel
+            else:
+                self.func = parse_mongo
         elif self.key == 'json':
             self.func = parse_json
         elif self.key == 'edges':
@@ -46,15 +52,21 @@ class Parser(object):
         else:
             self.name = self.key
 
-    def read(self):
+    def read(self, ind_=0):
         """
         Run the corresponding parsing function and return the .json_
         dictionary result.
         """
-
-        json_ = self.func()
-        time_log('Completed Parsing. Read: %d documents!' % len(json_[settings['out']['json']['json_doc_field']]))
-        return json_
+        parallel_flag = str(settings['pipeline']['in']['parallel']) == 'True'
+        if parallel_flag:
+            json_, ind_, N = self.func(ind_)
+            if json_:
+                time_log('Completed Parsing. Read: %d documents!' % len(json_[settings['out']['json']['json_doc_field']]))
+            return json_, ind_, N
+        else:
+            json_ = self.func()
+            time_log('Completed Parsing. Read: %d documents!' % len(json_[settings['out']['json']['json_doc_field']]))
+            return json_
 
 
 class Extractor(object):
@@ -206,17 +218,21 @@ class taskCoordinator(object):
                         dumper.save(json_)
 
     def run2(self):
-        parallel_flag = str(self.pipeline['in']['parallel']) == 'True'
-        if parallel_flag:
-            pass
+        if 'parallel' in self.pipeline['in']:
+            parallel_flag = True
         else:
-            stream_flag = str(self.pipeline['in']['stream']) == 'True'
+            parallel_flag = False
+        if parallel_flag:
             parser = Parser(self.pipeline['in']['inp'])
-            outfield = settings['out']['json']['json_doc_field']
-            json_all = parser.read()
-            if stream_flag:
-                for item in json_all[outfield]:
-                    json_ = {outfield:[item]}
+            ind_ = 0
+            while ind_ != None:
+                old_ind = 0
+                json_all, ind_, N = parser.read(ind_)
+                if not(ind_):
+                    break
+                outfield = settings['out']['json']['json_doc_field']
+                if json_all:
+                    json_ = json_all
                     for phase in self.phases:
                         dic = self.pipeline[phase]
                         if phase == 'trans':
@@ -229,6 +245,62 @@ class taskCoordinator(object):
                                 if value:
                                     dumper = Dumper(key, parser.key)
                                     dumper.save(json_)
+                if ind_:
+                    time_log('Processed %d documents in parallel. We are at index %d!' % (ind_ - old_ind, ind_))
+                    proc = int(ind_/float(N)*100)
+                if proc % 10 == 0 and proc > 0:
+                    time_log('~'*50)
+                    time_log('We are at %d/%d docemnts processed -- %0.2f %%' % (ind_, N, proc))
+                    time_log('~'*50)
+
+        else:
+            if 'stream' in self.pipeline['in']:
+                stream_flag = True
+            else:
+                stream_flag = False
+            inp_path = settings['load']['json']['inp_path']
+            outfield_inp = settings['load']['json']['docfield']
+            outfield_out = settings['out']['json']['json_doc_field']
+            c = 0
+            if stream_flag:
+                with open(inp_path, 'r') as f:
+                    docs = ijson2.items(f, '%s.item' % outfield_inp)
+                    for item in docs:
+                        c += 1
+                        json_ = {outfield_out:[item]}
+                        for phase in self.phases:
+                            dic = self.pipeline[phase]
+                            if phase == 'trans':
+                                for key, value in dic.iteritems():
+                                    if value:
+                                        extractor = Extractor(key, parser.key)
+                                        json_ = extractor.run(json_)
+                            if phase == 'out':
+                                for key, value in sorted(dic.iteritems()):
+                                    if value:
+                                        dumper = Dumper(key, self.pipeline['in']['inp'])
+                                        dumper.save(json_)
+
+                    if int(c) % 1000 == 0 and c > 1000:
+                        time_log('Processed %d documents in stream mode!' % (c))
+            # parser = Parser(self.pipeline['in']['inp'])
+            # outfield = settings['out']['json']['json_doc_field']
+            # json_all = parser.read()
+            # if stream_flag:
+            #     for item in json_all[outfield]:
+            #         json_ = {outfield:[item]}
+            #         for phase in self.phases:
+            #             dic = self.pipeline[phase]
+            #             if phase == 'trans':
+            #                 for key, value in dic.iteritems():
+            #                     if value:
+            #                         extractor = Extractor(key, parser.key)
+            #                         json_ = extractor.run(json_)
+            #             if phase == 'out':
+            #                 for key, value in sorted(dic.iteritems()):
+            #                     if value:
+            #                         dumper = Dumper(key, parser.key)
+            #                         dumper.save(json_)
 
             else:
                 json_ = json_all

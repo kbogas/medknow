@@ -52,7 +52,8 @@ def save_json(json_):
 
     # Output file location from settings
     outfile = settings['out']['json']['out_path']
-    if settings['pipeline']['in']['stream']:
+    if settings['pipeline']['in']['stream'] or settings['pipeline']['in']['parallel']:
+        print 'mpainei append'
         if os.path.isfile(outfile):
             with open(outfile, 'r') as f:
                 docs1 = json.load(f)[settings['out']['json']['json_doc_field']]
