@@ -24,7 +24,7 @@ from pymetamap import MetaMap
 from utilities import time_log, get_concept_from_cui, get_concept_from_source
 from itertools import product
 from multiprocessing import cpu_count, Pool
-
+from unidecode import unidecode
 
 def metamap_wrapper(text):
     """
@@ -415,7 +415,10 @@ def semrep_wrapper(text):
     """
     # Exec the binary
     # ???This is a temporary fix for the encoding problems???
-    text = repr(text)
+    # text = repr(text)
+    # THIS SHOULD FIX ENCODING PROBLEMS???
+    utf8 = text.decode('utf-8')
+    text = unidecode(utf8)
     #text = text
     cmd = "echo " + text + " | ./semrep.v1.7 -L 2015 -Z 2015AA -F"
     semrep_dir = settings['load']['path']['semrep']
