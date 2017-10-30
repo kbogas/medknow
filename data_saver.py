@@ -524,39 +524,41 @@ def create_edge_query(edge, sub_ent=settings['load']['edges']['sub_type'],
            MERGE (a)-[r:%s]->(b)
            ON MATCH SET """ % (sub_ent, edge[':START_ID'], obj_ent, edge[':END_ID'],  edge[':TYPE'])
     for key, value in edge.iteritems():
-        if (value):
-            if not(('START_ID' in key.split(':')) or ('END_ID' in key.split(':')) or ('TYPE' in key.split(':'))):
-                if 'string[]' in key:
-                    field = key.split(':')[0]
-                    string_value = '['
-                    for i in value.split(';'):
-                        string_value += '"' + i + '"' + ','
-                    string_value = string_value[:-1] + ']'
-                elif 'float[]' in key:
-                    field = key.split(':')[0]
-                    string_value = str([int(i) for i in value.split(';')])
-                else:
-                    field = key.split(':')[0]
-                    string_value = value.replace('"', "'")
-                s += ' r.%s = CASE WHEN NOT EXISTS(r.%s) THEN %s ELSE r.%s + %s END,' % (field, field, string_value, field, string_value)
+        # Don't see why this check should be here???
+        # if (value):
+        if not(('START_ID' in key.split(':')) or ('END_ID' in key.split(':')) or ('TYPE' in key.split(':'))):
+            if 'string[]' in key:
+                field = key.split(':')[0]
+                string_value = '['
+                for i in value.split(';'):
+                    string_value += '"' + i + '"' + ','
+                string_value = string_value[:-1] + ']'
+            elif 'float[]' in key:
+                field = key.split(':')[0]
+                string_value = str([int(i) for i in value.split(';')])
+            else:
+                field = key.split(':')[0]
+                string_value = value.replace('"', "'")
+            s += ' r.%s = CASE WHEN NOT EXISTS(r.%s) THEN %s ELSE r.%s + %s END,' % (field, field, string_value, field, string_value)
     s = s[:-1]
     s += ' ON CREATE SET '
     for key, value in edge.iteritems():
-        if (value):
-            if not(('START_ID' in key.split(':')) or ('END_ID' in key.split(':')) or ('TYPE' in key.split(':'))):
-                if 'string[]' in key:
-                    field = key.split(':')[0]
-                    string_value = '['
-                    for i in value.split(';'):
-                        string_value += '"' + i + '"' + ','
-                    string_value = string_value[:-1] + ']'
-                elif 'float[]' in key:
-                    field = key.split(':')[0]
-                    string_value = str([int(i) for i in value.split(';')])
-                else:
-                    field = key.split(':')[0]
-                    string_value = value.replace('"', "'")
-                s += ' r.%s = %s,' % (field, string_value)
+        # Don't see why this check should be here???
+        # if (value):
+        if not(('START_ID' in key.split(':')) or ('END_ID' in key.split(':')) or ('TYPE' in key.split(':'))):
+            if 'string[]' in key:
+                field = key.split(':')[0]
+                string_value = '['
+                for i in value.split(';'):
+                    string_value += '"' + i + '"' + ','
+                string_value = string_value[:-1] + ']'
+            elif 'float[]' in key:
+                field = key.split(':')[0]
+                string_value = str([int(i) for i in value.split(';')])
+            else:
+                field = key.split(':')[0]
+                string_value = value.replace('"', "'")
+            s += ' r.%s = %s,' % (field, string_value)
     s = s[:-1]
     return s
 
@@ -847,7 +849,6 @@ def save_mongo(json_):
     docs = json_[settings['out']['json']['json_doc_field']]
     for i, doc in enumerate(docs):
         result = collection.replace_one({'id': str(doc[idfield])}, doc, True)
-        print result.__dict__
         if i % 100 == 0 and i > 99:
             time_log("Process: %d -- %0.2f %%" % (i, 100*i/float(len(docs))))
 
