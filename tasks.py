@@ -271,6 +271,9 @@ class taskCoordinator(object):
                     for item in docs:
                         c += 1
                         json_ = {outfield_out:[item]}
+                        json_ = parse_json(json_)
+                        parser = Parser(self.pipeline['in']['inp'])
+                        #print json_
                         for phase in self.phases:
                             dic = self.pipeline[phase]
                             if phase == 'trans':

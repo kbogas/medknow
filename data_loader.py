@@ -417,9 +417,10 @@ def semrep_wrapper(text):
     # ???This is a temporary fix for the encoding problems???
     # text = repr(text)
     # THIS SHOULD FIX ENCODING PROBLEMS???
-    utf8 = text.decode('utf-8')
+    utf8 = unicode(text)
     text = unidecode(utf8)
-    #text = text
+    # THIS IS NEEDED FOR ANY ARTIFACTS!
+    text = repr(text)
     cmd = "echo " + text + " | ./semrep.v1.7 -L 2015 -Z 2015AA -F"
     semrep_dir = settings['load']['path']['semrep']
     lines = runProcess(cmd, semrep_dir)
@@ -678,7 +679,7 @@ def parse_medical_rec():
     json_ = {docfield: diag.to_dict(orient='records')}
     return json_
 
-def parse_json():
+def parse_json(json_=None):
     """
     Parse file containing articles.
     Output:
@@ -689,9 +690,10 @@ def parse_json():
     """
 
     # input file path from settings.yaml
-    inp_path = settings['load']['json']['inp_path']
-    with open(inp_path, 'r') as f:
-        json_ = json.load(f, encoding='utf-8')
+    if not(json):
+        inp_path = settings['load']['json']['inp_path']
+        with open(inp_path, 'r') as f:
+            json_ = json.load(f, encoding='utf-8')
 
     # docfield containing list of elements containing text
     outfield = settings['load']['json']['docfield']
