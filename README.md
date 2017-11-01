@@ -6,7 +6,7 @@ This project has been designed with modularity in mind, allowing the implementat
 Currently, the main features of this project are(some under work):
 * Different kind of input sources: free text, already extracted relations, concepts etc.
 * A variety of knowledge extractors working in a pipeline: **SemRep**, **MetaMap**, **Reverb**
-* Multiple persistency options: saving enriched documents to file, entities and relations to .csv, utilizing **Neo4j**. Also, using **Mongodb** for sentence fetching.
+* Multiple persistency options: saving enriched documents to file, entities and relations to .csv, utilizing **Neo4j**. Also, using **Mongodb** for sentence fetching and instead of saving .json to files.
 
 ## Getting Started
 These instructions will get you a copy of the project up and running on your local machine for development and testing purposes.
@@ -20,6 +20,9 @@ If you'd like to persist results in Neo4j you will have to pre-install it on you
 
 ### MongoDB
 If you'd like to keep track of the sentences as found in each document/article, in order to retrieve them later you will have to pre-install MongoDB on your local machine. More details available on their [website](https://www.mongodb.com/).
+
+### YAJL
+In order deal with big .json files in as streams, this system uses the [ijson](https://pypi.python.org/pypi/ijson/) module and more specifically the python bindings for the [yajl](http://lloyd.github.io/yajl/) JSON parser. So you should install this also.
 
 ### Python Modules
 This is pretty straightforward, the needed modules are located in *requirements.txt*. You can, either install them individually or better yet use [pip](https://pip.pypa.io/en/stable/) to install them in a bundle, by executing:
@@ -40,7 +43,8 @@ All of these choices are parameterized in **settings.yaml**, following the .yaml
 - **load**: Variables regarding the paths of SemRep, input files, as well as, key fields in .json and .csv files where text and other information is stored
 - **apis**: API keys used for specific services.
 - **neo4j**: Details regarding the connection to an existing Neo4j instance
-- **mongo**: Details regarding the connection to a mongodb collection(If it does not exist in will be created)
+- **mongo_sentences**: Details regarding the connection to a mongodb collection(If it does not exist in will be created)
+- **cache_path**: Path to .json file which is used as a long-term cache when fetching mappings of entities to CUIs (e.g. DRUGBANK-ID -> UMLS_CUI)
 - **Output**: Variables and paths regarding the generated results.
 
 Details on each variable are found in the settings.yaml. An overview of the available keys-values is presented here:
@@ -49,6 +53,8 @@ Details on each variable are found in the settings.yaml. An overview of the avai
     - **json**: Used for json from the harvester and enriched jsoni generated from this module.
     -  **edges**: A field containing edges-relations is expected to be found in the file. Used for DOID,DRUGBANK,MESH etc. relations.
     -  **med_rec**: Would be used for medical records but the main functionality is that it deals with delimited-files.
+    -  **mongo**: Used to read collection of documents from mongo instead of a json file.
+    -  **delete**: In case we want to delete edges from a specific resource. The unwanted edges are denoted from the **resource** value in the *neo4j* field. 
 - *trans*: What kind of transformations-extractions to do:
     - **metamap**: True/False. If we want to extract entities using metamap. TODO: ! MERGE Entities and Treshold ! 
     - **reverb**: True/False. If we want to extract relations using reverb. TODO: ! Map Entities to UMLS CONCEPTS IN SENTENCE!
@@ -58,63 +64,72 @@ Details on each variable are found in the settings.yaml. An overview of the avai
     - **json**: True/False. Save the intermediate json generated after all the transformations/extraction are done, before updating the database.
     - **csv**: True/False. Create the corresponding node and edge files, to be used by the command-line neo4j import-tool. Not very useful for the time being.
     - **neo4j**: True/False. Create/Update the neo4j graph with the entities and relations found in the json generated from the trans steps or the **pre-enriched** json of 'json' or 'edges' input given at the start.
+    - **mongo_sentences**: True/False. If you want to save index the processed sentences in a mongo.
+    - **mongo**: True/False. If you want to save the enriched json file in mongo.
 
 **load**:
   - *path*:
-    - **metamap**: Path to metamap binary.*
-    - **reverb**: Path to reverb binary.*
-    - **semrep**: Path to semrep binary.*
+    - **metamap**: Path to metamap binary.
+    - **reverb**: Path to reverb binary.
+    - **semrep**: Path to semrep binary.
   - *med_rec*: If the value in pipeline 'inp' is not **med_rec** the following values are irrelevant for the task at hand.
-    - **inp_path**: Path to delimited file.*
-    - **textfield**: Name of the column where the text is located (e.g. MedicalDiagnosis).*
-    - **sep**: Delimiter value (e.g. \t).*
-    - **idfield**: Name of the column where the ids are found (e.g. patient_id).*
+    - **inp_path**: Path to delimited file.
+    - **textfield**: Name of the column where the text is located (e.g. MedicalDiagnosis).
+    - **sep**: Delimiter value (e.g. \t).
+    - **idfield**: Name of the column where the ids are found (e.g. patient_id).
   - *json*: If the value in pipeline 'inp' is not **json** the following values are irrelevant for the task at hand.
-    - **inp_path**: Path to json file.*
-    - **docfield**: Outer field of the json file where the documents/articles are located (e.g. documents).*
-    - **textfield**: Name of the field to read text from (e.g. abstractText).*
-    - **idfield**: Name of the column where the ids are found (e.g. pmid.*
-    - **labelfield**: Field where the label of the document is situated (e.g. title).*
+    - **inp_path**: Path to json file.
+    - **docfield**: Outer field of the json file where the documents/articles are located (e.g. documents).
+    - **textfield**: Name of the field to read text from (e.g. abstractText).
+    - **idfield**: Name of the column where the ids are found (e.g. pmid.
+    - **labelfield**: Field where the label of the document is situated (e.g. title).
 - *edges*: If the value in pipeline 'inp' is not **edges** the following values are irrelevant for the task at hand.
-    - **inp_path**: Path to edges file.*
-    - **edge_field**: Name of the outer field where the relations-edges are found (e.g. relations).*
-    - **sub_type**:Type of the subject in the relations. Currently supporting Entity, Article and any new type of nodes.*
-    - **obj_type**:Type of the pbject in the relations. Currently supporting Entity, Article and any new type of nodes.*
-    - **sub_source**: What type of source is needed to transform the subject entity. Currently supporting: UMLS when the entities are cuis, [MSH, DRUGBANK, .. and the rest from the umls rest mapping used accordingly], [Article, Text and None when no transformation is needed on the subject entity given].*
-    - **obj_source**: What type of source is needed to transform the object entity. Currently supporting: UMLS when the entities are cuis, [MSH, DRUGBANK, .. and the rest from the umls rest mapping used accordingly], [Article, Text and None when no transformation is needed on the object entity given].*
+    - **inp_path**: Path to edges file.
+    - **edge_field**: Name of the outer field where the relations-edges are found (e.g. relations).
+    - **sub_type**:Type of the subject in the relations. Currently supporting Entity, Article and any new type of nodes.
+    - **obj_type**:Type of the pbject in the relations. Currently supporting Entity, Article and any new type of nodes.
+    - **sub_source**: What type of source is needed to transform the subject entity. Currently supporting: UMLS when the entities are cuis, [MSH, DRUGBANK, .. and the rest from the umls rest mapping used accordingly], [Article, Text and None when no transformation is needed on the subject entity given].
+    - **obj_source**: What type of source is needed to transform the object entity. Currently supporting: UMLS when the entities are cuis, [MSH, DRUGBANK, .. and the rest from the umls rest mapping used accordingly], [Article, Text and None when no transformation is needed on the object entity given].
+- *mongo*:  If the value in pipeline 'inp' is not **mongo** the following values are irrelevant for the task at hand.
+    - **mongodb**:DB Full uri for reading the json file. If user/pass required pass it here like *https://user:pass@host:port*
+    - **db**: The name of the database.
+    - **collection**: The name of the collection
+    - **docfield**: Outer field of the json file where the documents/articles are located (e.g. documents) when loaded and passed to the pipeline
+    - **inp_path**: For printing purposes only. Something to understand the collection from which we read the data
 
 **apis**: API Keys for when calling different services
-  - **biont**: Bioportal api for fetching uri info of a concept. Not currently in use.*
-  - **umls**: UMLS REST api key. Useful only when the 'inp' in pipeline is **edges** and **get_concepts_from_edges** is True.*
+  - **biont**: Bioportal api for fetching uri info of a concept. Not currently in use.
+  - **umls**: UMLS REST api key. Useful only when the 'inp' in pipeline is **edges** and **get_concepts_from_edges** is True.
 
 **neo4j**: Variables for connection to an existing and running neo4j graph. If **neo4j** is False in the pipeline the following don't matter.
-  - **host**: Database url (e.g localhost).*
-  - **port**: Port number (e.g. 7474).* 
-  - **user**: Username (e.g. neo4j).*
-  - **password**: Password (e.g. admin).*
+  - **host**: Database url (e.g localhost).
+  - **port**: Port number (e.g. 7474).
+  - **user**: Username (e.g. neo4j).
+  - **password**: Password (e.g. admin).
+  - **resource**: The resource from which the edges have been generated. This is also used in accordance to the *delete* value in **input**, when we want to delete these kind of edges for provenance reasons.
  
-**mongo**: Variables for connection to an existing and running mongodb. If **mongo** is False in the pipeline the following don't matter. Also, if the wanted db-collection is not existing, it will be created.
-  - **uri**: Full uri needed to connect to the db (e.g. mongodb://user:pass@localhost:27017).*
-  - **db**: Name of the database.* 
-  - **collection**: Name of the collection.*
-  - 
+**mongo_sentences**: Variables for connection to an existing and running mongodb. If **mongo** is False in the pipeline the following don't matter. Also, if the wanted db-collection is not existing, it will be created.
+  - **uri**: Full uri needed to connect to the db (e.g. mongodb://user:pass@localhost:27017).
+  - **db**: Name of the database. 
+  - **collection**: Name of the collection.
+
 **out**: Which of the following sections will be used is related to whether the corresponding key in the pipeline 'out' field has a True value. If not, they don't matter.
 - *json*:
-    - **out_path**: path where the generated json will be saved.* 
-    - **json_doc_field**: Name of the outer field containing the enriched-transformed articles-relations (e.g. mostly documents or  relations till now, according to whether we have 'json'(articles) or 'edges'(relations) to process). Better use the same as in the 'edges' or 'json' outerfield accordingly.*
-    - **json_text_field**: For 'articles' or input that has text, the name of the field to save the text to (e.g. text).*
-    - **json_id_field:** For 'articles' or collection of documents, the name of the field to save their id (e.g. id).*
-    - **json_label_field**: For 'articles' or collection of documents, the name of the field to save their label (e.g. title).*
-    - **sent_prefix**: For 'articles' or input that has text, the prefix to be used in the sentence-id generation procedure (e.g. abstract/fullbody).*
+    - **out_path**: path where the generated json will be saved.
+    - **json_doc_field**: Name of the outer field containing the enriched-transformed articles-relations (e.g. mostly documents or  relations till now, according to whether we have 'json'(articles) or 'edges'(relations) to process). Better use the same as in the 'edges' or 'json' outerfield accordingly.
+    - **json_text_field**: For 'articles' or input that has text, the name of the field to save the text to (e.g. text).
+    - **json_id_field:** For 'articles' or collection of documents, the name of the field to save their id (e.g. id).
+    - **json_label_field**: For 'articles' or collection of documents, the name of the field to save their label (e.g. title).
+    - **sent_prefix**: For 'articles' or input that has text, the prefix to be used in the sentence-id generation procedure (e.g. abstract/fullbody).
 - *csv*:
-    - **out_path**: path where the nodes and edges .csvs will be saved.* 
+    - **out_path**: path where the nodes and edges .csvs will be saved. 
 - neo4j:
-    - **out_path**: This is just for printing purposes that the save will be perfomed in 'out_path'. Change the variables in the **neo4j** section if you want to configure access to neo4j, not this! (e.g. localhost:7474)*
+    - **out_path**: This is just for printing purposes that the save will be perfomed in 'out_path'. Change the variables in the **neo4j** section if you want to configure access to neo4j, not this! (e.g. localhost:7474)
 - mongo:
-    - **out_path**: This is just for printing purposes that the save will be perfomed in 'out_path'. Change the variables in the **mongo** section if you want to configure access to mongodb, not this! (e.g. localhost:27017)*
-
-The fields ending with *, can take up any value if they are not needed in the corresponding task. The pipeline denotes which tasks to do and correspondiglym which sections of the .yaml to access.
-
+    - **mongodb**:DB Full uri for writing the enrichedjson file. If user/pass required pass it here like *https://user:pass@host:port*
+    - **db**: The name of the database.
+    - **collection**: The name of the collection
+    - **out_path**: For printing purposes only. Something to understand the collection in which we write the output.
 
 
 #### !!!! CONFIGURE SETTINGS.YAML BEFORE RUNNING THE SCRIPT !!!!

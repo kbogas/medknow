@@ -727,7 +727,7 @@ def parse_json(json_=None):
     json_[out_outfield] = json_.pop(outfield)
     # N = len(json_[out_outfield])
     # json_[out_outfield] = json_[out_outfield][(2*N/5):(3*N/5)]
-    json_[out_outfield] = json_[out_outfield][:6]
+    json_[out_outfield] = json_[out_outfield][:]
     return json_
 
 
