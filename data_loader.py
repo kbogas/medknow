@@ -396,7 +396,9 @@ def enrich_with_triples(results, subject, pred='MENTIONED_IN'):
     results['triples'] = triples
     return results
         
-
+def force_to_unicode(text):
+    "If text is unicode, it is returned as is. If it's str, convert it to Unicode using UTF-8 encoding"
+    return text if isinstance(text, unicode) else text.decode('utf8', 'ignore')
 
 def semrep_wrapper(text):
     """
@@ -417,7 +419,7 @@ def semrep_wrapper(text):
     # ???This is a temporary fix for the encoding problems???
     # text = repr(text)
     # THIS SHOULD FIX ENCODING PROBLEMS???
-    utf8 = unicode(text)
+    utf8 = force_to_unicode(text)
     text = unidecode(utf8)
     # THIS IS NEEDED FOR ANY ARTIFACTS!
     text = repr(text)
@@ -456,11 +458,14 @@ def semrep_wrapper(text):
     for line in lines:
         # If Sentence
         if line.startswith('SE'):
+            ##### DEPRECATED AS IN CLEAN TEXT WE REMOVE TABS FROM TEXT #######
             # Temporary workaround to remove read |-delimited semrep output
-            # Wihtout mixing up tabs contained in the text
-            line = line.replace('\|', '!@#$')
+            # Without mixing up tabs contained in the text
+            # line = line.replace('\|', '!@#$')
+            # elements = line.split('|')
+            # elements = [el.replace('!@#$', '\|') for el in elements]
+            #########################  DEPRECATED ###########################
             elements = line.split('|')
-            elements = [el.replace('!@#$', '\|') for el in elements]
             # New sentence that was processed
             if elements[5] == 'text':
                 tmp = {"entities": [], "relations": []}
@@ -534,7 +539,12 @@ def extract_semrep(json_, key):
             chunks = create_text_batches(text)
             results = {'text': text, 'sents': []}
             sent_id = 0
+            # c = 0
             for chunk in chunks:
+                # c += 1
+                # print 'CHUNK %d' % c 
+                # print chunk
+                # print '~'*50
                 tmp = semrep_wrapper(chunk)
                 for sent in tmp['sents']:
                     sent['sent_id'] = sent_id
@@ -689,8 +699,8 @@ def parse_json(json_=None):
         the article
     """
 
-    # input file path from settings.yaml
-    if not(json):
+    # input file path from settings.yamml
+    if not(json_):
         inp_path = settings['load']['json']['inp_path']
         with open(inp_path, 'r') as f:
             json_ = json.load(f, encoding='utf-8')
@@ -767,16 +777,20 @@ def parse_mongo_parallel(ind_= 0):
     out_outfield = settings['out']['json']['json_doc_field']
     json_ = {out_outfield: []}
     N_THREADS = cpu_count()
+    N_collection = collection.count()
     # batch size
-    step = N_THREADS * 100
-    if step > collection.count():
-        step = collection.count()
-    if ind_ >= collection.count():
-        return None, None, collection.count()
+    step = N_THREADS * 500
+    time_log("Will start from %d/%d and read %d docs" % (ind_, N_collection, step))
+    if step > N_collection:
+        step = N_collection
+    if ind_ >= N_collection:
+        return None, None, N_collection
     else:
         cur = collection.find({}, skip=ind_, limit=step)
+        c = 0
         for item in cur:
             del item['_id']
+            c += 1
             json_[out_outfield].append(item)
         #textfield to read text from
         textfield = settings['load']['json']['textfield']
@@ -788,6 +802,10 @@ def parse_mongo_parallel(ind_= 0):
         out_textfield = settings['out']['json']['json_text_field']
         # labelfield where title of the document is stored
         out_labelfield = settings['out']['json']['json_label_field']
+        c = 0
+        for art in json_[out_outfield]:
+            if not(textfield in art.keys()):
+                c += 1
         json_[out_outfield] = [art for art in json_[out_outfield] if textfield in art.keys()]
         for article in json_[out_outfield]:
             if not(textfield in article.keys()):
@@ -800,7 +818,7 @@ def parse_mongo_parallel(ind_= 0):
                 article[out_labelfield] = ' '
             if not('journal' in article.keys()):
                 article['journal'] = 'None'
-        return json_, ind_ + step, collection.count()
+        return json_, ind_ + step, N_collection
 
 
 def parse_mongo():

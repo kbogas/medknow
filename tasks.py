@@ -12,9 +12,10 @@ from data_loader import parse_medical_rec, parse_json, parse_edges, parse_remove
                         extract_semrep, extract_semrep_parallel, extract_metamap, get_concepts_from_edges, \
                         parse_mongo, parse_mongo_parallel
 from data_saver import save_csv, save_neo4j, save_json, save_json2, create_neo4j_results, \
-                        create_neo4j_csv, update_neo4j, update_mongo_sentences, save_mongo
+                        create_neo4j_csv, update_neo4j, update_mongo_sentences, save_mongo, update_neo4j_parallel
 from tqdm import tqdm
 import ijson.backends.yajl2_cffi as ijson2
+
 
 
 class Parser(object):
@@ -36,7 +37,7 @@ class Parser(object):
             self.func = parse_medical_rec
         if self.key == 'mongo':
             parallel_flag = str(settings['pipeline']['in']['parallel']) == 'True'
-            stream_flag = str(settings['pipeline']['in']['parallel']) == 'True'
+            stream_flag = str(settings['pipeline']['in']['stream']) == 'True'
             if parallel_flag or stream_flag:
                 self.func = parse_mongo_parallel
             else:
@@ -58,7 +59,8 @@ class Parser(object):
         dictionary result.
         """
         parallel_flag = str(settings['pipeline']['in']['parallel']) == 'True'
-        if parallel_flag:
+        stream_flag = str(settings['pipeline']['in']['stream']) == 'True'
+        if parallel_flag or stream_flag:
             json_, ind_, N = self.func(ind_)
             if json_:
                 time_log('Completed Parsing. Read: %d documents!' % len(json_[settings['out']['json']['json_doc_field']]))
@@ -156,14 +158,17 @@ class Dumper(object):
             self.func = create_neo4j_csv
         elif self.key == 'neo4j':
             self.transform = create_neo4j_results
+            parallel_flag = str(settings['pipeline']['in']['parallel']) == 'True'
             self.func = update_neo4j
+            if parallel_flag:
+                self.func = update_neo4j_parallel
         elif self.key == 'mongo_sentences':
             self.transform = None
             self.func = update_mongo
         elif self.key == 'mongo':
             self.transform = None
             self.func = save_mongo
-        if inp_key == 'med_rec' or inp_key == 'json':
+        if inp_key == 'med_rec' or inp_key == 'json' or inp_key == 'mongo':
             self.type_ = 'harvester'
         elif inp_key == 'edges':
             self.type_ = 'edges'
@@ -227,7 +232,7 @@ class taskCoordinator(object):
             parallel_flag = False
         if parallel_flag:
             parser = Parser(self.pipeline['in']['inp'])
-            ind_ = 0
+            ind_ = 36000
             while ind_ != None:
                 old_ind = 0
                 json_all, ind_, N = parser.read(ind_)
@@ -253,7 +258,7 @@ class taskCoordinator(object):
                     proc = int(ind_/float(N)*100)
                 if proc % 10 == 0 and proc > 0:
                     time_log('~'*50)
-                    time_log('We are at %d/%d docemnts processed -- %0.2f %%' % (ind_, N, proc))
+                    time_log('We are at %d/%d documents processed -- %0.2f %%' % (ind_, N, proc))
                     time_log('~'*50)
 
         else:
@@ -261,34 +266,66 @@ class taskCoordinator(object):
                 stream_flag = True
             else:
                 stream_flag = False
-            inp_path = settings['load']['json']['inp_path']
-            outfield_inp = settings['load']['json']['docfield']
-            outfield_out = settings['out']['json']['json_doc_field']
-            c = 0
             if stream_flag:
-                with open(inp_path, 'r') as f:
-                    docs = ijson2.items(f, '%s.item' % outfield_inp)
-                    for item in docs:
-                        c += 1
-                        json_ = {outfield_out:[item]}
-                        json_ = parse_json(json_)
-                        parser = Parser(self.pipeline['in']['inp'])
-                        #print json_
-                        for phase in self.phases:
-                            dic = self.pipeline[phase]
-                            if phase == 'trans':
-                                for key, value in dic.iteritems():
-                                    if value:
-                                        extractor = Extractor(key, parser.key)
-                                        json_ = extractor.run(json_)
-                            if phase == 'out':
-                                for key, value in sorted(dic.iteritems()):
-                                    if value:
-                                        dumper = Dumper(key, self.pipeline['in']['inp'])
-                                        dumper.save(json_)
+                if self.pipeline['in']['inp'] == 'json':
+                    inp_path = settings['load']['json']['inp_path']
+                    outfield_inp = settings['load']['json']['docfield']
+                    outfield_out = settings['out']['json']['json_doc_field']
+                    c = 0
+                    with open(inp_path, 'r') as f:
+                        docs = ijson2.items(f, '%s.item' % outfield_inp)
+                        for item in docs:
+                            c += 1
+                            json_ = {outfield_out:[item]}
+                            json_ = parse_json(json_)
+                            parser = Parser(self.pipeline['in']['inp'])
+                            #print json_
+                            for phase in self.phases:
+                                dic = self.pipeline[phase]
+                                if phase == 'trans':
+                                    for key, value in dic.iteritems():
+                                        if value:
+                                            extractor = Extractor(key, parser.key)
+                                            json_ = extractor.run(json_)
+                                if phase == 'out':
+                                    for key, value in sorted(dic.iteritems()):
+                                        if value:
+                                            dumper = Dumper(key, self.pipeline['in']['inp'])
+                                            dumper.save(json_)
 
-                    if int(c) % 1000 == 0 and c > 1000:
-                        time_log('Processed %d documents in stream mode!' % (c))
+                        if int(c) % 1000 == 0 and c > 1000:
+                            time_log('Processed %d documents in stream mode!' % (c))
+                elif self.pipeline['in']['inp'] == 'mongo':
+                    parser = Parser(self.pipeline['in']['inp'])
+                    ind_ = 0
+                    while ind_ or (ind_ == 0):
+                        old_ind = 0
+                        json_all, ind_, N = parser.read(ind_)
+                        if not(ind_):
+                            break
+                        outfield = settings['out']['json']['json_doc_field']
+                        if json_all:
+                            json_ = json_all
+                            for phase in self.phases:
+                                dic = self.pipeline[phase]
+                                if phase == 'trans':
+                                    for key, value in dic.iteritems():
+                                        if value:
+                                            extractor = Extractor(key, parser.key)
+                                            json_ = extractor.run(json_)
+                                if phase == 'out':
+                                    for key, value in sorted(dic.iteritems()):
+                                        if value:
+                                            dumper = Dumper(key, parser.key)
+                                            dumper.save(json_)
+                        if ind_:
+                            time_log('Processed %d documents in parallel. We are at index %d!' % (ind_ - old_ind, ind_))
+                            proc = int(ind_/float(N)*100)
+                        if proc % 10 == 0 and proc > 0:
+                            time_log('~'*50)
+                            time_log('We are at %d/%d documents processed -- %0.2f %%' % (ind_, N, proc))
+                            time_log('~'*50)
+
             # parser = Parser(self.pipeline['in']['inp'])
             # outfield = settings['out']['json']['json_doc_field']
             # json_all = parser.read()
