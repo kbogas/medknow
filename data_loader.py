@@ -779,7 +779,7 @@ def parse_mongo_parallel(ind_= 0):
     N_THREADS = cpu_count()
     N_collection = collection.count()
     # batch size
-    step = N_THREADS * 100
+    step = N_THREADS * 500
     time_log("Will start from %d/%d and read %d docs" % (ind_, N_collection, step))
     if step > N_collection:
         step = N_collection

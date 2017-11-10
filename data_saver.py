@@ -537,7 +537,14 @@ def create_edge_query(edge, sub_ent=settings['load']['edges']['sub_type'],
                 string_value = string_value[:-1] + ']'
             elif 'float[]' in key:
                 field = key.split(':')[0]
-                string_value = str([int(i) for i in value.split(';')])
+                # Dealing with empty or non-scored elements
+                tmp_s = []
+                for i in value.split(';'):
+                    try:
+                        tmp_s.append(int(i))
+                    except ValueError:
+                        tmp_s.append(0)
+                string_value = str(tmp_s)
             else:
                 field = key.split(':')[0]
                 string_value = value.replace('"', "'")
@@ -556,7 +563,14 @@ def create_edge_query(edge, sub_ent=settings['load']['edges']['sub_type'],
                 string_value = string_value[:-1] + ']'
             elif 'float[]' in key:
                 field = key.split(':')[0]
-                string_value = str([int(i) for i in value.split(';')])
+                # Dealing with empty or non-scored elements
+                tmp_s = []
+                for i in value.split(';'):
+                    try:
+                        tmp_s.append(int(i))
+                    except ValueError:
+                        tmp_s.append(0)
+                string_value = str(tmp_s)
             else:
                 field = key.split(':')[0]
                 string_value = value.replace('"', "'")

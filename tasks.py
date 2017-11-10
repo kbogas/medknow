@@ -232,7 +232,7 @@ class taskCoordinator(object):
             parallel_flag = False
         if parallel_flag:
             parser = Parser(self.pipeline['in']['inp'])
-            ind_ = 0
+            ind_ = 63120
             while ind_ != None:
                 old_ind = ind_
                 json_all, ind_, N = parser.read(ind_)
@@ -297,7 +297,7 @@ class taskCoordinator(object):
                             time_log('Processed %d documents in stream mode!' % (c))
                 elif self.pipeline['in']['inp'] == 'mongo':
                     parser = Parser(self.pipeline['in']['inp'])
-                    ind_ = 62000
+                    ind_ = 63120
                     while ind_ or (ind_ == 0):
                         old_ind = ind_
                         json_all, ind_, N = parser.read(ind_)
