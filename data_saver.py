@@ -925,9 +925,16 @@ def save_mongo(json_):
     idfield = settings['out']['json']['json_id_field']
     docs = json_[settings['out']['json']['json_doc_field']]
     for i, doc in enumerate(docs):
-        result = collection.replace_one({'id': str(doc[idfield])}, doc, True)
+        if idfield in doc:
+            result = collection.replace_one({'id': str(doc[idfield])}, doc, True)
+        elif 'p' in doc:
+            result = collection.replace_one({'p': doc['p'], 's': doc['s'], 'o': doc['o']}, doc, True)
+        else:
+            time_log('Unknown type to persist to mongo')
+            raise NotImplementedError
         if i % 100 == 0 and i > 99:
             time_log("Process: %d -- %0.2f %%" % (i, 100*i/float(len(docs))))
+
 
 
 

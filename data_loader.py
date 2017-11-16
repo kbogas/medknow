@@ -741,7 +741,7 @@ def parse_json(json_=None):
     return json_
 
 
-def parse_edges():
+def parse_edges(json_=None):
     """
     Parse file containing edges-relations between nodes.
     Output:
@@ -749,11 +749,11 @@ def parse_edges():
         json-style dictionary with a field containing
         relations
     """
-
-    # input file path from settings.yaml
-    inp_path = settings['load']['edges']['inp_path']
-    with open(inp_path, 'r') as f:
-        json_ = json.load(f, encoding='utf-8')
+    if not(json_):
+        # input file path from settings.yaml
+        inp_path = settings['load']['edges']['inp_path']
+        with open(inp_path, 'r') as f:
+            json_ = json.load(f, encoding='utf-8')
     return json_
 
 def parse_mongo_parallel(ind_= 0):
@@ -779,7 +779,7 @@ def parse_mongo_parallel(ind_= 0):
     N_THREADS = cpu_count()
     N_collection = collection.count()
     # batch size
-    step = N_THREADS * 500
+    step = N_THREADS * 1
     time_log("Will start from %d/%d and read %d docs" % (ind_, N_collection, step))
     if step > N_collection:
         step = N_collection

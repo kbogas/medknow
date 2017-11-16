@@ -232,8 +232,8 @@ class taskCoordinator(object):
             parallel_flag = False
         if parallel_flag:
             parser = Parser(self.pipeline['in']['inp'])
-            ind_ = 63120
-            while ind_ != None:
+            ind_ = 68
+            while ind_ or (ind_ == 0):
                 old_ind = ind_
                 json_all, ind_, N = parser.read(ind_)
                 if not(ind_):
@@ -267,9 +267,14 @@ class taskCoordinator(object):
             else:
                 stream_flag = False
             if stream_flag:
-                if self.pipeline['in']['inp'] == 'json':
-                    inp_path = settings['load']['json']['inp_path']
-                    outfield_inp = settings['load']['json']['docfield']
+                if self.pipeline['in']['inp'] == 'json' or self.pipeline['in']['inp'] == 'edges':
+                    inp_path = settings['load'][self.pipeline['in']['inp']]['inp_path']
+                    if self.pipeline['in']['inp'] == 'json':
+                        outfield_inp = settings['load'][self.pipeline['in']['inp']]['docfield']
+                    elif self.pipeline['in']['inp'] == 'edges':
+                        outfield_inp = settings['load'][self.pipeline['in']['inp']]['edge_field']
+                    else:
+                        raise NotImplementedError
                     outfield_out = settings['out']['json']['json_doc_field']
                     c = 0
                     with open(inp_path, 'r') as f:
@@ -277,9 +282,11 @@ class taskCoordinator(object):
                         for item in docs:
                             c += 1
                             json_ = {outfield_out:[item]}
-                            json_ = parse_json(json_)
+                            if self.pipeline['in']['inp'] == 'json':
+                                json_ = parse_json(json_)
+                            elif self.pipeline['in']['inp'] == 'edges':
+                                json_ = parse_edges(json_)
                             parser = Parser(self.pipeline['in']['inp'])
-                            #print json_
                             for phase in self.phases:
                                 dic = self.pipeline[phase]
                                 if phase == 'trans':
@@ -297,7 +304,7 @@ class taskCoordinator(object):
                             time_log('Processed %d documents in stream mode!' % (c))
                 elif self.pipeline['in']['inp'] == 'mongo':
                     parser = Parser(self.pipeline['in']['inp'])
-                    ind_ = 63120
+                    ind_ = 68
                     while ind_ or (ind_ == 0):
                         old_ind = ind_
                         json_all, ind_, N = parser.read(ind_)

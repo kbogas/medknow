@@ -25,6 +25,29 @@ tgt = AuthClient.gettgt()
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+
+def get_umls_ticket2(tgt=tgt, AuthClient=AuthClient, apikey=umls_api):
+    """
+    Get a single use ticket for the UMLS REST services.
+    It is supposed that an Author Client and a Ticket
+    Granting Service have already been set-up in case
+    the apikey = None. If an api-key is given, create the
+    above needed instances and generate a new ticket.
+    Input:
+        - apikey: str,
+        UMLS REST services api-key. Default is None and
+        the already establised service is used
+    Output:
+        - string of the generated ticket
+    """
+
+    # Get ticket from the already establised service
+    if not(tgt) and not(AuthClient):
+        AuthClient = Authentication(umls_api)
+        tgt = AuthClient.gettgt()
+    return AuthClient.getst(tgt)
+
+
 def get_umls_ticket(apikey=None, AuthClient=AuthClient, tgt=tgt):
     """
     Get a single use ticket for the UMLS REST services.
@@ -64,7 +87,7 @@ def time_log(phrase, time_start=None):
     return 1
 
 
-def get_concept_from_source(source_id, source, apikey=None):
+def get_concept_from_source(source_id, source, apikey=tgt):
     """
     Function that maps an entity from another source to UMLS concepts.
     Input:
@@ -84,11 +107,11 @@ def get_concept_from_source(source_id, source, apikey=None):
         Check get_concept_from_cui for more details
     """
 
-    ticket = get_umls_ticket(apikey)
+    ticket = get_umls_ticket2(tgt)
+    #ticket = get_umls_ticket(apikey)
     params = {'string': source_id, 'sabs': source, 'searchType': 'exact',
               'inputType': 'sourceUi', 'ticket': ticket}
     url = "https://uts-ws.nlm.nih.gov/rest/search/current"
-    print url
     print params
     r = requests.get(url, params=params)
     r.encoding = 'utf-8'
@@ -96,10 +119,11 @@ def get_concept_from_source(source_id, source, apikey=None):
     if r.ok:
         items = json.loads(r.text)
         jsonData = items["result"]
+        print items
         # Get cuis related to source_id
         cuis = [res['ui']for res in jsonData['results']]
         # Get concepts from cuis
-        concepts = [get_concept_from_cui(cui, apikey) for cui in cuis]
+        concepts = [get_concept_from_cui(cui, tgt) for cui in cuis]
     else:
         time_log(r.url)
         time_log('Error getting concept from: Source %s   | ID: %s' % (source, source_id))
@@ -124,8 +148,11 @@ def get_concept_from_cui(cui, apikey=None):
         the semantic types us returned)
     """
 
-    ticket = get_umls_ticket(apikey)
+    ticket = get_umls_ticket2(tgt)
+    #ticket = get_umls_ticket(apikey)
     url = "https://uts-ws.nlm.nih.gov/rest/content/current/CUI/" + cui
+    print url
+    print ticket
     r = requests.get(url, params={'ticket': ticket})
     r.encoding = 'utf-8'
     res = {}
@@ -140,7 +167,7 @@ def get_concept_from_cui(cui, apikey=None):
             # https://uts-ws.nlm.nih.gov/rest/semantic-network/current/TUI/T116
             code_tui = stys['uri'].split('/')[-1]
             # Fetch the abbreviation of this TUI code
-            sem_types.append(get_sem_type_abbr(code_tui, apikey))
+            sem_types.append(get_sem_type_abbr(code_tui, tgt))
         # Comma separated string
         sem_types = ",".join(sem_types)
         res['sem_types'] = sem_types
@@ -164,8 +191,8 @@ def get_sem_type_abbr(code_tui, apikey=None):
     Output:
         string, abbreviation of the code (e.g. "gngm")
     """
-
-    ticket = get_umls_ticket(apikey)
+    ticket = get_umls_ticket2()
+    #ticket = get_umls_ticket(apikey)
     url = "https://uts-ws.nlm.nih.gov/rest/semantic-network/current/TUI/" + code_tui
     r = requests.get(url, params={'ticket': ticket})
     r.encoding = 'utf-8'
