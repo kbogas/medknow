@@ -107,27 +107,36 @@ def get_concept_from_source(source_id, source, apikey=tgt):
         Check get_concept_from_cui for more details
     """
 
-    ticket = get_umls_ticket2(tgt)
+    ticket = get_umls_ticket2()
     #ticket = get_umls_ticket(apikey)
-    params = {'string': source_id, 'sabs': source, 'searchType': 'exact',
-              'inputType': 'sourceUi', 'ticket': ticket}
     url = "https://uts-ws.nlm.nih.gov/rest/search/current"
-    print params
-    r = requests.get(url, params=params)
-    r.encoding = 'utf-8'
-    concepts = []
-    if r.ok:
-        items = json.loads(r.text)
-        jsonData = items["result"]
-        print items
-        # Get cuis related to source_id
-        cuis = [res['ui']for res in jsonData['results']]
-        # Get concepts from cuis
-        concepts = [get_concept_from_cui(cui, tgt) for cui in cuis]
-    else:
-        time_log(r.url)
-        time_log('Error getting concept from: Source %s   | ID: %s' % (source, source_id))
-        raise ValueError
+    passed = False
+    times = 0
+    while not(passed):
+        params = {'string': source_id, 'sabs': source, 'searchType': 'exact',
+              'inputType': 'sourceUi', 'ticket': ticket}
+        r = requests.get(url, params=params)
+        r.encoding = 'utf-8'
+        concepts = []
+        if r.ok:
+            items = json.loads(r.text)
+            jsonData = items["result"]
+            # Get cuis related to source_id
+            cuis = [res['ui']for res in jsonData['results']]
+            # Get concepts from cuis
+            concepts = [get_concept_from_cui(cui) for cui in cuis]
+            passed = True
+        else:
+            time_log(r.url)
+            time_log('Error getting concept from: Source %s   | ID: %s' % (source, source_id))
+            time_log('~'*25 + ' GETTING NEW TICKET SERVICE' + '~'*24)
+            ticket = get_umls_ticket2(None, None, umls_api)
+            times += 1
+            if times >= 2:
+                passed = True
+                time_log('Error getting concept from: Source %s   | ID: %s' % (source, source_id))
+                time_log('~'*25 + ' Moving on after trying with new service  ' + '~'*25)
+                raise ValueError
     return concepts
 
 
@@ -148,12 +157,18 @@ def get_concept_from_cui(cui, apikey=None):
         the semantic types us returned)
     """
 
-    ticket = get_umls_ticket2(tgt)
+    ticket = get_umls_ticket2()
     #ticket = get_umls_ticket(apikey)
     url = "https://uts-ws.nlm.nih.gov/rest/content/current/CUI/" + cui
-    print url
-    print ticket
-    r = requests.get(url, params={'ticket': ticket})
+    passed = False
+    while not(passed):
+        try:
+            r = requests.get(url, params={'ticket': ticket}, timeout=120)
+            passed = True
+        except requests.exceptions.Timeout:
+            time_log('~'*25 + ' TIMEOUT ERROR 120 SECONDS'+'~'*25)
+            time_log('~'*25 + ' GETTING NEW TICKET SERVICE' + '~'*24)
+            ticket = get_umls_ticket2(None, None, umls_api)
     r.encoding = 'utf-8'
     res = {}
     if r.ok:
@@ -167,7 +182,7 @@ def get_concept_from_cui(cui, apikey=None):
             # https://uts-ws.nlm.nih.gov/rest/semantic-network/current/TUI/T116
             code_tui = stys['uri'].split('/')[-1]
             # Fetch the abbreviation of this TUI code
-            sem_types.append(get_sem_type_abbr(code_tui, tgt))
+            sem_types.append(get_sem_type_abbr(code_tui))
         # Comma separated string
         sem_types = ",".join(sem_types)
         res['sem_types'] = sem_types
@@ -194,7 +209,15 @@ def get_sem_type_abbr(code_tui, apikey=None):
     ticket = get_umls_ticket2()
     #ticket = get_umls_ticket(apikey)
     url = "https://uts-ws.nlm.nih.gov/rest/semantic-network/current/TUI/" + code_tui
-    r = requests.get(url, params={'ticket': ticket})
+    passed = False
+    while not(passed):
+        try:
+            r = requests.get(url, params={'ticket': ticket}, timeout=120)
+            passed = True
+        except requests.exceptions.Timeout:
+            time_log('~'*25 + ' TIMEOUT ERROR 120 SECONDS'+'~'*25)
+            time_log('~'*25 + ' GETTING NEW TICKET SERVICE' + '~'*24)
+            ticket = get_umls_ticket2(None, None, umls_api)
     r.encoding = 'utf-8'
     res = ' '
     if r.ok:

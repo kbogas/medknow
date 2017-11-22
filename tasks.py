@@ -232,7 +232,7 @@ class taskCoordinator(object):
             parallel_flag = False
         if parallel_flag:
             parser = Parser(self.pipeline['in']['inp'])
-            ind_ = 68
+            ind_ = 2388
             while ind_ or (ind_ == 0):
                 old_ind = ind_
                 json_all, ind_, N = parser.read(ind_)
@@ -281,6 +281,9 @@ class taskCoordinator(object):
                         docs = ijson2.items(f, '%s.item' % outfield_inp)
                         for item in docs:
                             c += 1
+                            if c < 278000:
+                                continue
+                            print c
                             json_ = {outfield_out:[item]}
                             if self.pipeline['in']['inp'] == 'json':
                                 json_ = parse_json(json_)

@@ -400,6 +400,28 @@ def force_to_unicode(text):
     "If text is unicode, it is returned as is. If it's str, convert it to Unicode using UTF-8 encoding"
     return text if isinstance(text, unicode) else text.decode('utf8', 'ignore')
 
+
+def toAscii_wrapper(text):
+    """
+    Function wrapper for Lexical Tool toAscii:
+    https://lexsrv3.nlm.nih.gov/LexSysGroup/Projects/lvg/current/docs/userDoc/tools/toAscii.html
+    Converts input to ascii ready for SemRep
+    Input:
+        - text: str,
+        a piece of text or sentence'
+    Output:
+        - text: str,
+        the same text with changes
+    """
+    text = clean_text(text)
+    #text = repr(text)
+    cmd = 'echo "' + text + '" | ./toAscii'
+    print cmd
+    toAscii_dir = settings['load']['path']['toAscii']
+    print toAscii_dir
+    lines = runProcess(cmd, toAscii_dir)
+    return lines[0]
+
 def semrep_wrapper(text):
     """
     Function wrapper for SemRep binary. It is called with flags
@@ -419,11 +441,13 @@ def semrep_wrapper(text):
     # ???This is a temporary fix for the encoding problems???
     # text = repr(text)
     # THIS SHOULD FIX ENCODING PROBLEMS???
+    text = clean_text(text)
     utf8 = force_to_unicode(text)
     text = unidecode(utf8)
     # THIS IS NEEDED FOR ANY ARTIFACTS!
     text = repr(text)
     cmd = "echo " + text + " | ./semrep.v1.7 -L 2015 -Z 2015AA -F"
+    print cmd
     semrep_dir = settings['load']['path']['semrep']
     lines = runProcess(cmd, semrep_dir)
     # mapping of line elements to fields
@@ -534,7 +558,7 @@ def extract_semrep(json_, key):
     N = len(json_[docfield])
     for i, doc in enumerate(json_[docfield]):
         print doc['id']
-        text = clean_text(doc[textfield])
+        text = doc[textfield]
         if len(text) > 5000:
             chunks = create_text_batches(text)
             results = {'text': text, 'sents': []}
