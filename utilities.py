@@ -21,9 +21,30 @@ umls_api = settings['apis']['umls']
 AuthClient = Authentication(umls_api)
 tgt = AuthClient.gettgt()
 
-
+# To supress some kind of warning?!
 logging.getLogger("requests").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
+
+
+
+# logging.basicConfig(
+#     format="%(asctime)s [%(threadName)-12.12s] [%(levelname)-5.5s]  %(message)s",
+#     handlers=[
+#         #logging.FileHandler("%s" % settings['log_path']),
+#         logging.StreamHandler()
+#     ])
+# logging.info('lala')
+
+# # create logger
+# logger = logging.getLogger()
+# formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# ch = logging.StreamHandler()
+# ch.setFormatter(formatter)
+# logger.addHandler(ch)
+
+# fh = logging.FileHandler(settings['log_path'])
+# fh.setFormatter(formatter)
+# logger.addHandler(fh)
 
 
 def get_umls_ticket2(tgt=tgt, AuthClient=AuthClient, apikey=umls_api):
@@ -124,7 +145,7 @@ def get_concept_from_source(source_id, source, apikey=tgt):
             # Get cuis related to source_id
             cuis = [res['ui']for res in jsonData['results']]
             # Get concepts from cuis
-            concepts = [get_concept_from_cui(cui) for cui in cuis]
+            concepts = [get_concept_from_cui(cui) for cui in cuis if cui != 'NONE']
             passed = True
         else:
             time_log(r.url)
@@ -135,8 +156,8 @@ def get_concept_from_source(source_id, source, apikey=tgt):
             if times >= 2:
                 passed = True
                 time_log('Error getting concept from: Source %s   | ID: %s' % (source, source_id))
-                time_log('~'*25 + ' Moving on after trying with new service  ' + '~'*25)
-                raise ValueError
+                time_log('~'*25 + ' EXITING AFTER TRYING TWICE WITH NEW TICKET  ' + '~'*25)
+                exit(1)
     return concepts
 
 
@@ -161,6 +182,7 @@ def get_concept_from_cui(cui, apikey=None):
     #ticket = get_umls_ticket(apikey)
     url = "https://uts-ws.nlm.nih.gov/rest/content/current/CUI/" + cui
     passed = False
+    times = 0
     while not(passed):
         try:
             r = requests.get(url, params={'ticket': ticket}, timeout=120)
@@ -169,6 +191,12 @@ def get_concept_from_cui(cui, apikey=None):
             time_log('~'*25 + ' TIMEOUT ERROR 120 SECONDS'+'~'*25)
             time_log('~'*25 + ' GETTING NEW TICKET SERVICE' + '~'*24)
             ticket = get_umls_ticket2(None, None, umls_api)
+            times += 1
+            if times >= 2:
+                passed = True
+                time_log('Error getting concept from: CUI %s' % cui)
+                time_log('~'*25 + ' EXITING AFTER TRYING TWICE WITH NEW TICKET  ' + '~'*25)
+                exit(1)
     r.encoding = 'utf-8'
     res = {}
     if r.ok:
@@ -210,6 +238,7 @@ def get_sem_type_abbr(code_tui, apikey=None):
     #ticket = get_umls_ticket(apikey)
     url = "https://uts-ws.nlm.nih.gov/rest/semantic-network/current/TUI/" + code_tui
     passed = False
+    times = 0
     while not(passed):
         try:
             r = requests.get(url, params={'ticket': ticket}, timeout=120)
@@ -218,6 +247,12 @@ def get_sem_type_abbr(code_tui, apikey=None):
             time_log('~'*25 + ' TIMEOUT ERROR 120 SECONDS'+'~'*25)
             time_log('~'*25 + ' GETTING NEW TICKET SERVICE' + '~'*24)
             ticket = get_umls_ticket2(None, None, umls_api)
+        times += 1
+        if times >= 2:
+            passed = True
+            time_log('Error getting semantic type abbreviation: %s' % code_tui)
+            time_log('~'*25 + ' EXITING AFTER TRYING TWICE WITH NEW TICKET  ' + '~'*25)
+            exit(1)
     r.encoding = 'utf-8'
     res = ' '
     if r.ok:

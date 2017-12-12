@@ -1,13 +1,11 @@
 #!/usr/bin/python
-## 5/19/2016 - update to allow for authentication based on api-key, rather than username/pw
-## See https://documentation.uts.nlm.nih.gov/rest/authentication.html for full explanation
+# 5/19/2016 - update to allow for authentication based on api-key, rather than username/pw
+# See https://documentation.uts.nlm.nih.gov/rest/authentication.html for full explanation
 
 import requests
 from pyquery import PyQuery as pq
-from lxml import etree
 
 uri = "https://utslogin.nlm.nih.gov"
-
 auth_endpoint = "/cas/v1/api-key"
 
 
@@ -31,16 +29,11 @@ class Authentication:
         tgt = d.find('form').attr('action')
         return tgt
 
-    def getst(self,tgt):
+    def getst(self, tgt):
 
         params = {'service': self.service}
-        h = {"Content-type": "application/x-www-form-urlencoded", "Accept": "text/plain", "User-Agent": "python" }
+        h = {"Content-type": "application/x-www-form-urlencoded", 
+             "Accept": "text/plain", "User-Agent": "python"}
         r = requests.post(tgt, data=params, headers=h)
         st = r.text
         return st
-
-   
-   
-
-
-

@@ -9,18 +9,11 @@
 import json
 import os
 import py2neo
-import csv
-import subprocess
-import urllib2
-import requests
 import unicodecsv as csv2
-import pandas as pd
-import py2neo
-import logging
 import pymongo
 from config import settings
 from utilities import time_log
-from data_loader import chunk_document_collection
+from data_extractor import chunk_document_collection
 from multiprocessing import cpu_count, Pool
 
 
@@ -215,7 +208,7 @@ def create_neo4j_edges(json_):
         of the node/edge and the 'value' field containg the nodes/edges
     """
     # docfield containing list of elements containing the relations
-    edgefield = settings['load']['edges']['edge_field']
+    edgefield = settings['load']['edges']['itemfield']
     # field containing the type of the node for the subject
     sub_type = settings['load']['edges']['sub_type']
     # field containing the source of the node for the subject
@@ -281,7 +274,7 @@ def create_neo4j_harvester(json_):
         of the node/edge and the 'value' field containg the nodes/edges
     """
     # docfield containing list of elements
-    out_outfield = settings['out']['json']['json_doc_field']
+    out_outfield = settings['out']['json']['itemfield']
     # textfield to read text from
     out_textfield = settings['out']['json']['json_text_field']
     # idfield where id of document is stored
@@ -763,7 +756,26 @@ def update_neo4j_parallel(results):
         details
     Output: None, creates/merges the nodes to the wanted database
     """
-    N_THREADS = cpu_count()
+    found = False
+    for key in ['nodes', 'edges']:
+        for item in results[key]:
+            if item['values'] and item['type'] == 'Entity':
+                found = True
+                break
+        if found:
+            break
+    if not(found):
+        time_log('NO NODES/EDGES FOUND! MOVING ON!')
+        return 1
+        #c = raw_input()
+        #if c=='q':
+        #    exit()
+        #else:
+        #    return
+    try:
+        N_THREADS = int(settings['num_cores'])
+    except:
+        N_THREADS = cpu_count()
     # results = {'nodes': [{'type': 'Entity', 'values': entities_nodes}, {'type': 'Article', 'values': articles_nodes}],
     #            'edges': [{'type': 'relation', 'values': relations_edges}, {'type': 'mention', 'values': entity_pmc_edges}]
     #            }
@@ -791,6 +803,7 @@ def update_neo4j_parallel(results):
     else:
         time_log('Something wrong with the parallel execution?')
         time_log('Returned %d instead of %d' % (sum(res), N_THREADS))
+    return 1
 
 def update_neo4j_parallel_worker(results):
     """
@@ -876,7 +889,7 @@ def update_mongo_sentences(json_):
     collection = db[collection_name]
     new = 0
     upd = 0
-    docs = json_[settings['out']['json']['json_doc_field']]
+    docs = json_[settings['out']['json']['itemfield']]
     for i, doc in enumerate(docs):
         cursor = collection.find({'id': doc['id']})
         sents = [{'sent_id': sent['sent_id'], 'text': sent['sent_text']} for sent in doc['sents']]
@@ -901,16 +914,14 @@ def update_mongo_sentences(json_):
 
 def save_mongo(json_):
     """
-    Helper function to save the sentences found in the enriched articles in
-    mongodb. Connecting to a collection according to settings and then
-    creating/updating the articles with the sentences found in them.
+    Helper function to save edges/documents to mongo.
     Input:
         - json_: dic,
-        json-style dictionary generated from the semrep extractor in the
+        json-style dictionary generated from the transformation modules in the
         previous phase. Must make sure that there is a field named as indicated
-        in json_['out']['json']['json_doc_field'], where the documents/articles
-        are stored and each document/article has a field sents, as expected
-        in the output of the semrep extractor.
+        in settings['out']['json']['json_doc_field'], where the edges/docs
+        are stored. Specifically for the articles, they are replaced if another
+        item with the same id is found in the collection.
     Output:
         None, just populates the database
 
@@ -923,20 +934,15 @@ def save_mongo(json_):
     collection = db[collection_name]
     # Output Idfield
     idfield = settings['out']['json']['json_id_field']
-    docs = json_[settings['out']['json']['json_doc_field']]
+    docs = json_[settings['out']['json']['itemfield']]
     for i, doc in enumerate(docs):
         if idfield in doc:
             result = collection.replace_one({'id': str(doc[idfield])}, doc, True)
         elif 'p' in doc:
-            result = collection.replace_one({'p': doc['p'], 's': doc['s'], 'o': doc['o']}, doc, True)
+            result = collection.insert_one(doc)
         else:
             time_log('Unknown type to persist to mongo')
             raise NotImplementedError
         if i % 100 == 0 and i > 99:
             time_log("Process: %d -- %0.2f %%" % (i, 100*i/float(len(docs))))
-
-
-
-
-
-        
+    return 1
