@@ -8,6 +8,7 @@
 import json
 import py2neo
 import pymongo
+import langid
 import pandas as pd
 from config import settings
 from utilities import time_log
@@ -87,7 +88,7 @@ def load_mongo_batches(key, N_collection, ind_=0):
             batch_per_core = 100
         step = N_THREADS * batch_per_core
     print ind_, step
-    time_log("Will start from %d/%d and read %d docs" % (ind_, N_collection, step))
+    time_log("Will start from %d/%d and read %d items" % (ind_, N_collection, step))
     if step > N_collection:
         step = N_collection
     else:
@@ -166,7 +167,7 @@ def load_file_batches(key, N_collection, ind_=0):
     # Collection counter
     col_counter = 0
     #print infield
-    time_log("Will start from %d/%d and read %d docs" % (ind_, N_collection, step))
+    time_log("Will start from %d/%d and read %d items" % (ind_, N_collection, step))
     with open(inp_path, 'r') as f:
         docs = ijson2.items(f, '%s.item' % infield)
         for c, item in enumerate(docs):
@@ -268,6 +269,7 @@ def parse_text(json_):
     # labelfield where title of the document is stored
     out_labelfield = settings['out']['json']['json_label_field']
     json_[outfield] = [art for art in json_[outfield] if textfield in art.keys()]
+    json_[outfield] = [art for art in json_[outfield] if langid.classify(art[textfield])[0] == 'en']
     for article in json_[outfield]:
         article[out_textfield] = article.pop(textfield)
         article[out_idfield] = article.pop(idfield)

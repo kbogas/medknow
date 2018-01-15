@@ -8,7 +8,7 @@
 
 from config import settings
 from utilities import time_log
-from data_loader import load_file, load_file_batches, load_mongo, load_file_batches, \
+from data_loader import load_file, load_file_batches, load_mongo, load_mongo_batches, \
                         parse_remove_edges, parse_text, get_collection_count
 from data_extractor import extract_semrep, extract_semrep_parallel, extract_metamap, \
                            get_concepts_from_edges, get_concepts_from_edges_parallel                          
@@ -179,7 +179,7 @@ class Dumper(object):
         Name of the Dumper. For printing purposes only
     """
 
-    def __init__(self, key, inp_key='json', name=None):
+    def __init__(self, key, inp_key='text', name=None):
         self.key = key
         if self.key == 'json':
             self.transform = None
@@ -200,7 +200,7 @@ class Dumper(object):
         elif self.key == 'mongo':
             self.transform = None
             self.func = save_mongo
-        if inp_key == 'med_rec' or inp_key == 'json' or inp_key == 'mongo':
+        if inp_key == 'text':
             self.type_ = 'harvester'
         elif inp_key == 'edges':
             self.type_ = 'edges'

@@ -282,7 +282,7 @@ def create_neo4j_harvester(json_):
     # labelfield where the label is located
     out_labelfield = settings['out']['json']['json_label_field']
     # Sentence Prefix
-    sent_prefix = settings['out']['json']['sent_prefix']
+    sent_prefix = settings['load']['text']['sent_prefix']
     if sent_prefix == 'None' or not(sent_prefix):
         sent_prefix = ''
     entities_nodes = []
