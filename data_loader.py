@@ -267,7 +267,6 @@ def parse_text(json_):
     out_idfield = settings['out']['json']['json_id_field']
     # labelfield where title of the document is stored
     out_labelfield = settings['out']['json']['json_label_field']
-    print json_.keys()
     json_[outfield] = [art for art in json_[outfield] if textfield in art.keys()]
     json_[outfield] = [art for art in json_[outfield] if langid.classify(art[textfield])[0] == 'en']
     for article in json_[outfield]:
