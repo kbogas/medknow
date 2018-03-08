@@ -437,7 +437,6 @@ def semrep_wrapper(text):
     text = unidecode(utf8)
     # text = toAscii_wrapper(text)
     # THIS IS NEEDED FOR ANY ARTIFACTS!
-    
     text = repr(text)
     cmd = "echo " + text + " | ./semrep.v1.7 -L 2015 -Z 2015AA -F"
     #print cmd

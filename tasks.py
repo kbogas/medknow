@@ -196,7 +196,7 @@ class Dumper(object):
                 self.func = update_neo4j_parallel
         elif self.key == 'mongo_sentences':
             self.transform = None
-            self.func = update_mongo
+            self.func = update_mongo_sentences
         elif self.key == 'mongo':
             self.transform = None
             self.func = save_mongo
@@ -216,7 +216,11 @@ class Dumper(object):
             else:
                 results = json_ 
             json_ = self.func(results)
-            time_log('Completed saving data. Results saved in:\n %s' % settings['out'][self.key]['out_path'])
+            if self.key == 'mongo_sentences':
+                out_p = '/'.join([settings[self.key]['uri'],settings[self.key]['db'],settings[self.key]['collection']])
+                time_log('Completed saving data. Results saved in:\n %s' % out_p)
+            else:
+                time_log('Completed saving data. Results saved in:\n %s' % settings['out'][self.key]['out_path'])
         else:
             time_log('Unsupported type of json to work on!')
             time_log('Task : %s  --- Type of json: %s' % (self.name, type(json)))
@@ -253,8 +257,6 @@ class taskCoordinator(object):
             while ind_ < N:
                 old_ind = ind_
                 json_all, ind_ = parser.read(N=N, ind_=ind_)
-                #print 'fetched'
-                #print json_all, ind_
                 outfield = settings['out']['json']['itemfield']
                 if json_all:
                     json_ = json_all
@@ -431,5 +433,9 @@ class taskCoordinator(object):
             if phase == 'out':
                 print('Will save the outcome as follows:')
                 for key, value in dic.iteritems():
-                    print('%s  : %s' % (key, settings['out'][key]['out_path']))
+                    if key == 'mongo_sentences':
+                        out_p = '/'.join([settings[key]['uri'],settings[key]['db'],settings[key]['collection']])
+                        print('%s  : %s' % (key, out_p))
+                    else:
+                        print('%s  : %s' % (key, settings['out'][key]['out_path']))
         print('#'*30 + ' Pipeline Schedule ' + '#'*30)

@@ -87,7 +87,6 @@ def load_mongo_batches(key, N_collection, ind_=0):
         except:
             batch_per_core = 100
         step = N_THREADS * batch_per_core
-    print ind_, step
     time_log("Will start from %d/%d and read %d items" % (ind_, N_collection, step))
     if step > N_collection:
         step = N_collection
@@ -268,6 +267,7 @@ def parse_text(json_):
     out_idfield = settings['out']['json']['json_id_field']
     # labelfield where title of the document is stored
     out_labelfield = settings['out']['json']['json_label_field']
+    print json_.keys()
     json_[outfield] = [art for art in json_[outfield] if textfield in art.keys()]
     json_[outfield] = [art for art in json_[outfield] if langid.classify(art[textfield])[0] == 'en']
     for article in json_[outfield]:
