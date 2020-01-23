@@ -10,4 +10,4 @@ requests == 2.18.1
 tqdm == 4.14.0
 unicodecsv == 0.14.1
 Unidecode == 0.04.17
-PyYAML == 3.12
+PyYAML == 5.1
