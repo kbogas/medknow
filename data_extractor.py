@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*
 
 
-# Functions to extract knowledge from medical text. Everything related to 
-# extraction needed for the knowledge base. Also, some wrappers for SemRep, 
+# Functions to extract knowledge from medical text. Everything related to
+# extraction needed for the knowledge base. Also, some wrappers for SemRep,
 # MetaMap and Reverb. Contains some enrichment routines for utilizing UTS
 # services.
 
@@ -28,7 +28,7 @@ def metamap_wrapper(text):
 
     !!!! REMEMBER TO START THE METAMAP TAGGER AND
         WordSense DISAMBIGUATION SERVER !!!!
-    
+
     Input:
         - text: str,
         a piece of text or sentence
@@ -52,7 +52,7 @@ def metamap_wrapper(text):
         for w_ind in wanted:
             w_conc = concepts[w_ind]
             if hasattr(w_conc, 'cui'):
-                tmp_conc = {'label': w_conc.preferred_name, 'cui': w_conc.cui, 
+                tmp_conc = {'label': w_conc.preferred_name, 'cui': w_conc.cui,
                             'sem_types': w_conc.semtypes, 'score': w_conc.score}
                 tmp['entities'].append(tmp_conc)
         sentences.append(tmp)
@@ -62,7 +62,7 @@ def metamap_wrapper(text):
     return {'sents': sentences, 'sent_text':text}
 
 
-def runProcess(exe, working_dir):    
+def runProcess(exe, working_dir):
     """
     Function that opens a command line and runs a command.
     Captures the output and returns.
@@ -88,7 +88,7 @@ def stopw_removal(inp, stop):
         - inp: str,
         string of the text input
         - stop: list,
-        list of stop-words to be removed 
+        list of stop-words to be removed
     """
 
     # Final string to be returned
@@ -201,7 +201,7 @@ def get_json_with_api(api_key, url):
         - url: str,
         url to curl
     Output:
-        - json-style dictionary with the curl results 
+        - json-style dictionary with the curl results
     """
 
     opener = urllib2.build_opener()
@@ -220,7 +220,7 @@ def threshold_concepts(concepts, hard_num=3, score=None):
         - hard_num: int,
         the first-N concepts to keep, if this thresholidng is selected
         - score: float,
-        lowest accepted concept score, if this thresholidng is selected 
+        lowest accepted concept score, if this thresholidng is selected
     """
 
     if hard_num:
@@ -232,7 +232,7 @@ def threshold_concepts(concepts, hard_num=3, score=None):
             return [c for c in concepts if c.score > score]
     else:
         return concepts
-        
+
 
 
 
@@ -275,7 +275,7 @@ def metamap_ents(x):
     Output:
         - ents: list,
         list of entities found. Each entity is a dictionary with
-        fields id (no. found in sentence), name if retrieved, cui if 
+        fields id (no. found in sentence), name if retrieved, cui if
         available and uri if found
     """
 
@@ -290,7 +290,7 @@ def metamap_ents(x):
         ent['name'] = get_name_concept(concept)
         if hasattr(concept, 'cui'):
             ent['cui'] = concept.cui
-            ent['uri'] = cui_to_uri(API_KEY, ent['cui']) 
+            ent['uri'] = cui_to_uri(API_KEY, ent['cui'])
         else:
             ent['cui'] = None
             ent['uri'] = None
@@ -381,7 +381,7 @@ def enrich_with_triples(results, subject, pred='MENTIONED_IN'):
         the predicate to be used as a link between the uri and the title
     Output:
         - results: dic,
-        the same dictionary with one more 
+        the same dictionary with one more
     """
     triples = []
     for sent_key, ents in results['entities'].iteritems():
@@ -390,7 +390,7 @@ def enrich_with_triples(results, subject, pred='MENTIONED_IN'):
                triples.append({'subj': ent['uri'], 'pred': pred, 'obj': subject})
     results['triples'] = triples
     return results
-        
+
 def force_to_unicode(text):
     "If text is unicode, it is returned as is. If it's str, convert it to Unicode using UTF-8 encoding"
     return text if isinstance(text, unicode) else text.decode('utf8', 'ignore')
@@ -428,7 +428,7 @@ def semrep_wrapper(text):
         jston-style dictionary with fields text and sents. Each
         sentence has entities and relations found in it. Each entity and
         each relation has attributes denoted in the corresponding
-        mappings dictionary. 
+        mappings dictionary.
     """
     # Exec the binary
     # THIS SHOULD FIX ENCODING PROBLEMS???
@@ -442,6 +442,7 @@ def semrep_wrapper(text):
     #print cmd
     semrep_dir = settings['load']['path']['semrep']
     lines = runProcess(cmd, semrep_dir)
+    #print(lines)
     # mapping of line elements to fields
     mappings = {
         "text": {
@@ -519,7 +520,7 @@ def clean_text(text):
         - text: str,
         the same text with cmd escaped parenthesis and removing '
     """
-    replace_chars = [('(', ' '), (')', ' '), ("'",  ' '), ('\n', " "), ('\t', ' '), (';', " "), 
+    replace_chars = [('(', ' '), (')', ' '), ("'",  ' '), ('\n', " "), ('\t', ' '), (';', " "),
                      ("}", " "), ("{", " "), ("|", " "), ("&", " "), ("/", ' ')]
     for unw_pair in replace_chars:
         text = text.replace(unw_pair[0], unw_pair[1])
@@ -556,12 +557,9 @@ def extract_semrep(json_, key):
             chunks = create_text_batches(text)
             results = {'text': text, 'sents': []}
             sent_id = 0
-            # c = 0
+            c = 0
             for chunk in chunks:
-                # c += 1
-                # print 'CHUNK %d' % c 
-                # print chunk
-                # print '~'*50
+                c += 1
                 tmp = semrep_wrapper(chunk)
                 for sent in tmp['sents']:
                     sent['sent_id'] = sent_id
@@ -671,7 +669,7 @@ def semrep_parallel_worker((json_, key)):
 
 def get_concepts_from_edges_parallel(json_, key):
     """
-    Same work as the get_concepts_from_edges_paralle. It uses multiprocessing 
+    Same work as the get_concepts_from_edges_paralle. It uses multiprocessing
     for efficiency.
     Input:
         - json: dict,
@@ -794,8 +792,8 @@ def get_concepts_from_edges(json_, key):
                 else:
                     sem_types = ent['sem_types']
 
-                triple_subj = [{'id:ID': ent['cuid'], 
-                                'label': ent['label'], 
+                triple_subj = [{'id:ID': ent['cuid'],
+                                'label': ent['label'],
                                 'sem_types:string[]': sem_types}]
             elif (sub_source == 'PMC') or (sub_source == 'TEXT') or (sub_source == 'None'):
                 triple_subj = [{'id:ID': triple['s']}]
@@ -816,8 +814,8 @@ def get_concepts_from_edges(json_, key):
                     else:
                         sem_types = ent['sem_types']
 
-                    triple_subj.append({'id:ID': ent['cuid'], 
-                                    'label': ent['label'], 
+                    triple_subj.append({'id:ID': ent['cuid'],
+                                    'label': ent['label'],
                                     'sem_types:string[]': sem_types})
             if obj_source == 'UMLS':
                 if not(triple['o'] in cache):
@@ -833,8 +831,8 @@ def get_concepts_from_edges(json_, key):
                     sem_types = ';'.join(ent['sem_types'].split(','))
                 else:
                     sem_types = ent['sem_types']
-                triple_obj = [{'id:ID': ent['cuid'], 
-                                'label': ent['label'], 
+                triple_obj = [{'id:ID': ent['cuid'],
+                                'label': ent['label'],
                                 'sem_types:string[]': sem_types}]
             elif (obj_source == 'PMC') or (obj_source == 'TEXT') or (obj_source == 'None'):
                 triple_obj = [{'id:ID': triple['o']}]
@@ -855,8 +853,8 @@ def get_concepts_from_edges(json_, key):
                     else:
                         sem_types = ent['sem_types']
 
-                    triple_obj.append({'id:ID': ent['cuid'], 
-                                    'label': ent['label'], 
+                    triple_obj.append({'id:ID': ent['cuid'],
+                                    'label': ent['label'],
                                     'sem_types:string[]': sem_types})
             combs = product(triple_subj, triple_obj)
             for comb in combs:

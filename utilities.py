@@ -157,7 +157,8 @@ def get_concept_from_source(source_id, source, apikey=tgt):
                 passed = True
                 time_log('Error getting concept from: Source %s   | ID: %s' % (source, source_id))
                 time_log('~'*25 + ' EXITING AFTER TRYING TWICE WITH NEW TICKET  ' + '~'*25)
-                exit(1)
+                #exit(1)
+                raise Exception
     return concepts
 
 
@@ -196,7 +197,8 @@ def get_concept_from_cui(cui, apikey=None):
                 passed = True
                 time_log('Error getting concept from: CUI %s' % cui)
                 time_log('~'*25 + ' EXITING AFTER TRYING TWICE WITH NEW TICKET  ' + '~'*25)
-                exit(1)
+                raise Exception
+                #exit(1)
     r.encoding = 'utf-8'
     res = {}
     if r.ok:
@@ -252,7 +254,8 @@ def get_sem_type_abbr(code_tui, apikey=None):
             passed = True
             time_log('Error getting semantic type abbreviation: %s' % code_tui)
             time_log('~'*25 + ' EXITING AFTER TRYING TWICE WITH NEW TICKET  ' + '~'*25)
-            exit(1)
+            raise Exception
+            #exit(1)
     r.encoding = 'utf-8'
     res = ' '
     if r.ok:

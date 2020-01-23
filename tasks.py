@@ -11,7 +11,7 @@ from utilities import time_log
 from data_loader import load_file, load_file_batches, load_mongo, load_mongo_batches, \
                         parse_remove_edges, parse_text, get_collection_count
 from data_extractor import extract_semrep, extract_semrep_parallel, extract_metamap, \
-                           get_concepts_from_edges, get_concepts_from_edges_parallel                          
+                           get_concepts_from_edges, get_concepts_from_edges_parallel
 from data_saver import save_csv, save_neo4j, save_json, save_json2, create_neo4j_results, \
                         create_neo4j_csv, update_neo4j, update_mongo_sentences, save_mongo, update_neo4j_parallel
 from tqdm import tqdm
@@ -55,7 +55,7 @@ class Parser(object):
             time_log('Source to read was %s. Please change settings' % self.source)
             raise NotImplementedError
         if self.key == 'text':
-            self.parse = parse_text 
+            self.parse = parse_text
         elif self.key == 'med_red':
             self.parse = None
         elif self.key == 'edges':
@@ -73,13 +73,13 @@ class Parser(object):
         Run the corresponding parsing function and return:
         Input:
             - ind_: int, the starting point to read from
-        Output: 
+        Output:
         1) In case of the batch or streaming processing:
             - json_: dict, the corresponding read batch
             - N: int, the total number of items to iterate through
             - ind_: int, the index where the next iteration of readings
             should start from
-            
+
         2) In case of loading the whole collection:
             - json_: dict, the corresponding collection
         """
@@ -214,7 +214,7 @@ class Dumper(object):
             if self.transform:
                 results = self.transform(json_, self.type_)
             else:
-                results = json_ 
+                results = json_
             json_ = self.func(results)
             if self.key == 'mongo_sentences':
                 out_p = '/'.join([settings[self.key]['uri'],settings[self.key]['db'],settings[self.key]['collection']])
@@ -245,7 +245,7 @@ class taskCoordinator(object):
 
     def run(self):
         parallel_flag = False
-        stream_flag = False    
+        stream_flag = False
         if 'parallel' in self.pipeline['in']:
             parallel_flag = True
         if 'stream' in self.pipeline['in']:
@@ -390,7 +390,7 @@ class taskCoordinator(object):
             #                         dumper = Dumper(key, parser.key)
             #                         dumper.save(json_)
 
-            
+
 
 
         # parser = Parser(self.pipeline['in']['inp'])
