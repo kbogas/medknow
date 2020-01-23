@@ -1,0 +1,202 @@
+##########################
+# CONFIGURATION FILE FOR VARIABLES
+# USED ACROSS THE PROJECT
+##########################
+
+
+##########################  PIPELINE  ##########################
+# Pipeline flags for what processes to perform on the data
+pipeline:
+  # What  to read
+  in:
+    # What's the source of the corpus.
+    source: mongo # 'mongo', 'file' and 'delete' values currently supported
+    # What's the type of the input to be read. Will use
+    # the corresponding fields in this setting file.
+    type: edges # 'text', 'edges' and 'med_rec' currently
+    # Do we want to do it all in a streaming fashion?
+    stream: False
+    # Do we want to perform parallel semrep processing?
+    # Currently for semrep extraction and neo4j saving
+    parallel: True
+  # What to do with it
+  trans:
+    # Extract entities using metamap?
+    metamap: False
+    # Extract relations using reverb?
+    reverb: False
+    # Extract entities + relations through semrep?
+    semrep: True
+    # Transform edges, fetching concepts and other info?
+    get_concepts_from_edges: False
+  # What to do with the outcome
+  out:
+    # Create json output?
+    json: False
+    # Create .csv files for neo4j?
+    csv: False
+    # Create-update neo4 db?
+    neo4j: True
+    # Create-update sentences in mongo?
+    mongo_sentences: False
+    # Create-update collection of documents/edges in mongo?
+    mongo: False
+########################## END PIPELINE ##########################
+
+
+
+
+
+##########################  INPUT ##########################
+# Variables regarding loading
+load:
+  # Paths to binaries/files
+  path:
+    # Path to metamap
+    metamap: /media/kostas/DATA/LLD/Metamap/public_mm/bin/metamap16
+    # Path to reverb
+    reverb: /media/kostas/DATA/GIT/reverb/core/
+    # Path to semrep
+    semrep: /media/kostas/DATA/LLD/SEMREP/public_semrep/bin/
+    # Path toAscii binary
+    toAscii: /media/kostas/DATA/LLD/Papers/BioASQ/MARIOS_PROJECT/lvg2017/bin
+    # Path to input File
+    file_path: /media/kostas/DATA/LLD/Papers/BioASQ/MARIOS_PROJECT/enriched_doid.json
+  # Mongo input variables
+  mongo:
+    # DB Full uri. If user/pass required pass it here like mongodb://user:pass@host:port
+    uri: mongodb://0.0.0.0:27017
+    # DB name
+    db: iasis_20190620_KGupdate
+    # Collection name
+    collection: LC_20190620_pubmed_MeSH_ENRICHED
+    # Cache collection name
+    cache_collection: cache
+    # FOR PRINTING PURPOSES ONLY!
+    file_path: mongodb://localhost:27017/iasis_20190620_KGupdate|LC_20190620_pubmed_MeSH_ENRICHED
+  # For medical records
+  med_rec:
+    # Medical record name of the column to read text from
+    textfield: PrimaryDiagnosisDescription
+    # Field separator
+    sep: \t
+    # idfield
+    idfield: AdmissionID
+  # For article-document type of input
+  text:
+    # Outer field name for the documents residing in a json probably
+    itemfield: documents
+    # Name of the field to read text from
+    textfield: abstractText #body_Filtered
+    # Idfield for each document
+    idfield: pmid
+    # Label field for each article
+    labelfield: title
+    # Sentence Prefix (is this abstract or fullText)
+    sent_prefix: abstract
+  # For relation-edge type of input
+  edges:
+    # Name of the field where edges are stored
+    itemfield: relations
+    # Type of the subject
+    # Currently [Entity, Article and any new one]
+    sub_type: Article
+    # Type of the object
+    obj_type: Entity
+    # Id_field of the subject
+    # Currently [UMLS for cuis, PMC or TEXT for articles, None for precomputed and whatever else for DRUGBANK,MSH etc]
+    sub_source: None
+    # Id_field of the subject
+    obj_source: None
+##########################  END INPUT ##########################
+
+
+
+##########################  API KEYS ##########################
+# Variables regarding apis
+apis:
+  # Biontology for mapping cuis to uris
+  biont: ********-****-****-****-************
+  # Umls ticket service
+  umls: ********-****-****-****-************
+##########################  END API KEYS ##########################
+
+##########################  NEO4j ##########################
+# Neoj variables
+neo4j:
+  # DB url
+  host: localhost
+  # port
+  port: 7474
+  # user name
+  user: neo4j
+  # password
+  password: admin
+  # name of the resource to be inputted in neo4j
+  resource: text
+##########################  END NEO4j ##########################
+
+
+##########################  MONGODB FOR SENTENCES ##########################
+# Mongo variables for writing sentences
+mongo_sentences:
+  # DB Full uri. If user/pass required pass it here like mongodb://user:pass@host:port
+  uri: mongodb://localhost:27017
+  # DB name
+  db: Marios
+  # Collection name
+  collection: Articles2
+##########################  END MONGODB ##########################
+
+
+########################## CACHE  ############################
+cache_path: /media/kostas/DATA/LLD/Papers/BioASQ/MARIOS_PROJECT/cache.json
+########################## END CACHE  ############################
+
+########################## LOG  ############################
+log_path: /media/kostas/DATA/LLD/Papers/BioASQ/MARIOS_PROJECT/medknow.log
+########################## END LOG  ############################
+
+
+########################## PARALLEL  ############################
+# Number of cores to use in parallel schemes. If none, it will be
+# equal to cpu count, using all available cores.
+num_cores: 4
+# Number of items per core to be processed. This will create a batch
+# of total size = num_cores*batch_per_core. It defaults to 100
+batch_per_core: 100
+########################## END PARALLEL  ############################
+
+##########################  OUTPUT ##########################
+# Output variables
+out:
+   # Resulting .json file before neo4j
+  json:
+    # Path
+    out_path: /media/kostas/DATA/LLD/Papers/BioASQ/MARIOS_PROJECT/MARIOS_ERRORS/small2.json
+    # Output json outer field name for the documents
+    itemfield: relations
+    # Output json text field for each document
+    json_text_field: text
+    # Output Idfield
+    json_id_field: id
+    # Output Label field
+    json_label_field: title
+  # Resulting .json file before neo4j
+  csv:
+    # Path
+    out_path: /media/kostas/DATA/LLD/Papers/BioASQ/MARIOS_PROJECT/out
+  # Resulting .json file before neo4j
+  neo4j:
+    # Just for printing! Change the Neo4j field variables, not this!
+    out_path: localhost:7474
+  mongo:
+    # DB Full uri. If user/pass required pass it here like mongodb://user:pass@host:port
+    uri: mongodb://localhost:27017
+    # DB name
+    db: iasis_20190620_KGupdate
+    # Collection name
+    collection: LC_20190620_pubmed_MeSH_ENRICHED
+    # Just for printing! Change the mongo field variables, not this!
+    out_path: localhost:27017/iasis_20190620_KGupdate|LC_20190620_pubmed_MeSH_ENRICHED
+##########################  END OUTPUT ##########################
